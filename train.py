@@ -659,10 +659,8 @@ total_tokens = step * TOTAL_BATCH_SIZE
 
 # Final eval — use larger batch for eval (no gradient memory needed)
 EVAL_BATCH_SIZE = DEVICE_BATCH_SIZE if DEVICE_TYPE == "cuda" else min(32, DEVICE_BATCH_SIZE * 8)
-if DEVICE_TYPE != "cuda":
-    import prepare as _prepare
-    _prepare.EVAL_TOKENS = 10 * 524288  # 80 steps on MPS vs 80 on CUDA (same coverage)
-eval_steps = _prepare.EVAL_TOKENS // (EVAL_BATCH_SIZE * MAX_SEQ_LEN) if DEVICE_TYPE != "cuda" else (40 * 524288) // (EVAL_BATCH_SIZE * MAX_SEQ_LEN)
+from prepare import EVAL_TOKENS as _EVAL_TOKENS
+eval_steps = _EVAL_TOKENS // (EVAL_BATCH_SIZE * MAX_SEQ_LEN)
 print(f"PHASE: VALIDATION ({eval_steps} steps, batch_size={EVAL_BATCH_SIZE})", flush=True)
 model.eval()
 with autocast_ctx:

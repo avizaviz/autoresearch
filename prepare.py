@@ -29,7 +29,8 @@ import torch
 
 MAX_SEQ_LEN = 2048       # context length
 TIME_BUDGET = 300        # training time budget in seconds (5 minutes)
-EVAL_TOKENS = 40 * 524288  # number of tokens for val eval
+_EVAL_MULTIPLIER = 40 if torch.cuda.is_available() else 10  # fewer tokens on MPS (same step count with smaller batch)
+EVAL_TOKENS = _EVAL_MULTIPLIER * 524288
 
 # ---------------------------------------------------------------------------
 # Configuration
