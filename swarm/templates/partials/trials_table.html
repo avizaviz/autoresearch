@@ -1,0 +1,114 @@
+{% if best_trial is defined and best_trial %}
+<tr style="background:rgba(16,185,129,.06);border-left:3px solid var(--green)">
+  <td class="mono">{{ best_trial.trial_index }}</td>
+  <td><span class="badge b-done"><span class="bd"></span>Best</span></td>
+  <td><span class="met">{{ "%.4f"|format(best_trial.val_bpb) }}</span></td>
+  <td><span style="color:var(--green);font-size:.68rem;font-weight:700">BEST</span></td>
+  <td>{% if best_trial.git_commit %}<span class="sha">{{ best_trial.git_commit[:7] }}</span>{% else %}<span class="dim">--</span>{% endif %}</td>
+  <td>{{ best_trial.worker_name or '--' }}</td>
+  <td class="mono">{% if best_trial.duration_seconds is not none %}{{ best_trial.duration_seconds|duration }}{% else %}--{% endif %}</td>
+  <td class="dim" style="font-size:.65rem">{% if best_trial.completed_at %}{{ best_trial.completed_at|timeago }}{% else %}{{ best_trial.created_at|timeago }}{% endif %}</td>
+</tr>
+<tr><td colspan="8" style="padding:0;border-bottom:2px solid rgba(16,185,129,.15)"></td></tr>
+{% endif %}
+{% for t in trials %}
+<tr>
+  <td class="mono">{{ t.trial_index }}</td>
+  <td><span class="badge {{ t.status|badge_class }}"><span class="bd"></span>{{ t.status|title }}</span></td>
+  <td>
+    {% if t.val_bpb is not none %}
+      {% if t.val_bpb == best_val_bpb %}
+      <span class="met">{{ "%.4f"|format(t.val_bpb) }}</span>
+      {% else %}
+      <span class="mono">{{ "%.4f"|format(t.val_bpb) }}</span>
+      {% endif %}
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if t.val_bpb is not none and t.val_bpb == best_val_bpb %}
+    <span style="color:var(--green);font-size:.68rem;font-weight:700">BEST</span>
+    {% elif t.val_bpb is not none and best_val_bpb is not none %}
+    <span class="dim">+{{ "%.3f"|format(t.val_bpb - best_val_bpb) }}</span>
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if t.git_commit %}
+    <span class="sha{% if t.status == 'failed' %}" style="color:var(--red){% endif %}">{{ t.git_commit[:7] }}</span>
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td>{{ t.worker_name or '--' }}</td>
+  <td class="mono">
+    {% if t.status == 'running' and t.started_at %}
+    {{ t.started_at|running_duration }}...
+    {% elif t.duration_seconds is not none %}
+    {{ t.duration_seconds|duration }}
+    {% else %}
+    --
+    {% endif %}
+  </td>
+  <td class="dim" style="font-size:.65rem">
+    {% if t.status == 'running' %}
+      {% if t.current_phase == 'training' %}
+      <span style="color:var(--cyan)">Training {{ "%.0f"|format(t.training_pct or 0) }}%</span>
+      {% elif t.current_phase == 'validation' %}
+      <span style="color:var(--amber)">Validation {{ "%.0f"|format(t.validation_pct or 0) }}%</span>
+      {% else %}
+      in progress
+      {% endif %}
+    {% elif t.status == 'failed' and t.stderr_tail %}{{ t.stderr_tail[:30] }}
+    {% elif t.completed_at %}{{ t.completed_at|timeago }}
+    {% else %}{{ t.created_at|timeago }}
+    {% endif %}
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="dim" style="text-align:center;padding:2rem">No trials yet.</td></tr>
+{% endfor %}
+
+{% if total is defined and total_pages is defined and total_pages > 1 %}
+<tr>
+  <td colspan="8" style="padding:.75rem 1rem;border-bottom:none">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="dim" style="font-size:.72rem">Showing {{ trials|length }} of {{ total }} trials (page {{ page }} of {{ total_pages }})</span>
+      <div style="display:flex;gap:4px">
+        {% if page > 1 %}
+        <button class="btn btn-o btn-s"
+                hx-get="/partials/trials-table/{{ exp_id }}?page={{ page - 1 }}&per_page={{ per_page }}{% if filter %}&filter={{ filter }}{% endif %}"
+                hx-target="#trials-tbody"
+                hx-swap="innerHTML">Prev</button>
+        {% else %}
+        <button class="btn btn-o btn-s" disabled style="opacity:.3">Prev</button>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+          {% if p == page %}
+          <button class="btn btn-s" style="background:var(--cyan);color:#000">{{ p }}</button>
+          {% elif (p - page)|abs <= 2 or p == 1 or p == total_pages %}
+          <button class="btn btn-o btn-s"
+                  hx-get="/partials/trials-table/{{ exp_id }}?page={{ p }}&per_page={{ per_page }}{% if filter %}&filter={{ filter }}{% endif %}"
+                  hx-target="#trials-tbody"
+                  hx-swap="innerHTML">{{ p }}</button>
+          {% elif (p - page)|abs == 3 %}
+          <span class="dim" style="padding:0 4px">...</span>
+          {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+        <button class="btn btn-o btn-s"
+                hx-get="/partials/trials-table/{{ exp_id }}?page={{ page + 1 }}&per_page={{ per_page }}{% if filter %}&filter={{ filter }}{% endif %}"
+                hx-target="#trials-tbody"
+                hx-swap="innerHTML">Next</button>
+        {% else %}
+        <button class="btn btn-o btn-s" disabled style="opacity:.3">Next</button>
+        {% endif %}
+      </div>
+    </div>
+  </td>
+</tr>
+{% endif %}

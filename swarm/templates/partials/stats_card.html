@@ -1,0 +1,13 @@
+{% set tc = trial_counts or {} %}
+<div style="margin-bottom:.8rem">
+  <div class="sl">Completed</div>
+  <div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--green)">{{ tc.get('completed', 0) }}</div>
+</div>
+<div style="margin-bottom:.8rem">
+  <div class="sl">Failed</div>
+  <div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--red)">{{ tc.get('failed', 0) }}</div>
+</div>
+<div>
+  <div class="sl">Running / Queued</div>
+  <div style="font-family:var(--mono);font-size:.85rem">{{ tc.get('running', 0) }} / {{ tc.get('queued', 0) }}</div>
+</div>

@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}{{ experiment.name }} — autoresearch swarm{% endblock %}
+
+{% block content %}
+<div class="stats"
+     hx-get="/partials/stat-boxes/{{ experiment.id }}"
+     hx-trigger="every 5s"
+     hx-swap="innerHTML">
+  {% include "partials/stat_boxes.html" %}
+</div>
+
+<div class="nav-row">
+  <a href="/" class="back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    All experiments
+  </a>
+  <div class="sep"></div>
+  <span style="font-weight:700;font-size:.9rem;margin-right:.5rem">{{ experiment.name }}</span>
+  <span class="badge {{ experiment.status|badge_class }}"><span class="bd"></span>{{ experiment.status|title }}</span>
+  <div style="flex:1"></div>
+  <a href="/experiments/{{ experiment.id }}?tab=experiment"
+     class="tab{% if tab == 'experiment' %} on{% endif %}">Experiment</a>
+  <a href="/experiments/{{ experiment.id }}?tab=workers"
+     class="tab{% if tab == 'workers' %} on{% endif %}">Workers</a>
+  <a href="/experiments/{{ experiment.id }}?tab=model"
+     class="tab{% if tab == 'model' %} on{% endif %}">Model</a>
+  <div class="sep"></div>
+  {% if experiment.status == 'running' %}
+  <form method="post" action="/experiments/{{ experiment.id }}/ui-action/stop" style="display:inline">
+    <button class="btn btn-x btn-s" type="submit">Stop</button>
+  </form>
+  {% elif experiment.status in ('stopped', 'draft') %}
+  <form method="post" action="/experiments/{{ experiment.id }}/ui-action/start" style="display:inline">
+    <button class="btn btn-go btn-s" type="submit">{{ 'Resume' if experiment.status == 'stopped' else 'Start' }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if tab == 'experiment' %}
+{# ─── EXPERIMENT SUB-TAB ─── #}
+<div class="ei">
+  <div>
+    <div class="ei-l">Dataset</div>
+    <div class="ei-v">{{ experiment.dataset_uri.split('/')[-1] if experiment.dataset_uri else 'Not uploaded' }}</div>
+  </div>
+  <div>
+    <div class="ei-l">Prompt</div>
+    <div class="ei-v">{% if experiment.prompt_uri == 'inline' %}Inline prompt{% elif experiment.prompt_uri %}{{ experiment.prompt_uri.split('/')[-1] }}{% else %}Not uploaded{% endif %}</div>
+  </div>
+  <div>
+    <div class="ei-l">Mode</div>
+    <div class="ei-v">{{ experiment.run_mode|replace('_', ' ')|title }}</div>
+  </div>
+  <div></div>
+</div>
+
+{% if experiment.best_val_bpb is not none %}
+<div class="best">
+  <div>
+    <div class="best-l">Current Best</div>
+    <div style="display:flex;align-items:baseline;gap:.6rem">
+      <span class="met" style="font-size:1.15rem">{{ "%.4f"|format(experiment.best_val_bpb) }}</span>
+      <span class="dim">val_bpb</span>
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div class="best-l">Best Commit</div>
+    <span class="sha">{{ (experiment.best_commit or '--')[:7] }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="g31 mb">
+  <div class="card">
+    <div class="ch">
+      <h2>Improvement Over Time</h2>
+      <span class="dim" style="font-size:.65rem">{{ trials|length }} trials</span>
+    </div>
+    <div class="cw"><canvas id="improvement-chart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="ch"><h2>Stats</h2></div>
+    <div class="cb"
+         hx-get="/partials/stats-card/{{ experiment.id }}"
+         hx-trigger="every 5s"
+         hx-swap="innerHTML">
+      {% include "partials/stats_card.html" %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="ch">
+    <h2>Trials</h2>
+    <div style="display:flex;gap:3px">
+      {% set tc = experiment.trial_counts or {} %}
+      {% set total = (tc.values()|list|sum) if tc else 0 %}
+      <a href="/experiments/{{ experiment.id }}?tab=experiment"
+         class="filter-btn{% if not filter %} active{% endif %}">All ({{ total }})</a>
+      <a href="/experiments/{{ experiment.id }}?tab=experiment&filter=completed"
+         class="filter-btn{% if filter == 'completed' %} active{% endif %}"
+         style="color:var(--green)">Done ({{ tc.get('completed', 0) }})</a>
+      <a href="/experiments/{{ experiment.id }}?tab=experiment&filter=failed"
+         class="filter-btn{% if filter == 'failed' %} active{% endif %}"
+         style="color:var(--red)">Failed ({{ tc.get('failed', 0) }})</a>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Status</th><th>val_bpb</th><th>vs Best</th><th>Commit</th><th>Worker</th><th>Duration</th><th>When</th></tr>
+    </thead>
+    <tbody id="trials-tbody"
+           hx-get="/partials/trials-table/{{ experiment.id }}?page=1&per_page=50{% if filter %}&filter={{ filter }}{% endif %}"
+           hx-trigger="every 10s"
+           hx-swap="innerHTML">
+      {% include "partials/trials_table.html" %}
+    </tbody>
+  </table>
+</div>
+
+{% elif tab == 'workers' %}
+{# ─── WORKERS SUB-TAB ─── #}
+{% if stale_trials %}
+<div class="banner banner-warn">
+  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L1.3 17a1.8 1.8 0 001.5 2.7h15.4a1.8 1.8 0 001.5-2.7L11.4 3a1.8 1.8 0 00-3 0zM11 8.5v3.5M11 15h.01"/></svg>
+  {{ stale_trials|length }} stuck trial{{ 's' if stale_trials|length != 1 }}:
+  {% for st in stale_trials %}
+    #{{ st.trial_index }} on <strong style="margin:0 3px">{{ st.worker_name or 'unknown' }}</strong>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card mb">
+  <div class="ch">
+    <h2>Workers</h2>
+    <span class="dim" style="font-size:.65rem">refreshes every 5s</span>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Worker</th><th>State</th><th>Current Trial</th><th>Done</th><th>Avg Time</th><th>Best val_bpb</th><th>Last Seen</th><th>GPU</th></tr>
+    </thead>
+    <tbody hx-get="/partials/workers-table?experiment_id={{ experiment.id }}"
+           hx-trigger="every 5s"
+           hx-swap="innerHTML">
+      {% include "partials/workers_table.html" %}
+    </tbody>
+  </table>
+</div>
+
+<div class="g2">
+  <div class="card">
+    <div class="ch"><h2>Trials per Worker</h2></div>
+    <div class="cw" style="height:180px"><canvas id="worker-chart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="ch"><h2>Recent Activity</h2></div>
+    <div class="cb" style="max-height:180px;overflow-y:auto">
+      {% for a in recent_activity %}
+      <div class="tl">
+        <div class="tdot" style="background:var({% if a.status == 'completed' %}--green{% elif a.status == 'failed' %}--red{% else %}--blue{% endif %})"></div>
+        <div>
+          <strong>{{ a.worker_name or 'unknown' }}</strong>
+          {% if a.status == 'completed' %}
+            done #{{ a.trial_index }}
+            {% if a.val_bpb is not none %}<span class="met">{{ "%.4f"|format(a.val_bpb) }}</span>{% endif %}
+          {% elif a.status == 'failed' %}
+            <span style="color:var(--red)">failed</span> #{{ a.trial_index }}
+          {% else %}
+            claimed #{{ a.trial_index }}
+          {% endif %}
+          <div class="tt">{{ (a.completed_at or a.started_at or a.created_at)|timeago }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="dim" style="text-align:center;padding:1rem;font-size:.75rem">No recent activity.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% elif tab == 'model' %}
+{# ─── MODEL SUB-TAB ─── #}
+{% if model is none or model is not mapping %}
+{# No model created yet #}
+<div class="card mb">
+  <div class="ch"><h2>Model</h2></div>
+  <div class="cb" style="text-align:center;padding:2.5rem 1rem">
+    <div style="font-size:1.5rem;margin-bottom:.5rem;opacity:.3">&#9881;</div>
+    <div style="font-size:.85rem;margin-bottom:.5rem">No model created yet.</div>
+    <div class="dim" style="font-size:.75rem;margin-bottom:1.2rem">Click Create to build a model from the best trial's <code>train.py</code>.</div>
+    {% if experiment.best_commit %}
+    <form method="post" action="/experiments/{{ experiment.id }}/ui-action/create-model" style="display:inline">
+      <button class="btn btn-go" type="submit">Create Model</button>
+    </form>
+    {% else %}
+    <div class="dim" style="font-size:.72rem">No completed trials yet — run some trials first.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% elif model.status == 'creating' %}
+{# Model currently being created #}
+<div class="card mb">
+  <div class="ch"><h2>Model</h2><span class="badge b-run"><span class="bd"></span>Creating</span></div>
+  <div class="cb">
+    <div style="margin-bottom:.5rem">
+      <span class="dim" style="font-size:.7rem">Source commit:</span>
+      <span class="sha">{{ (model.source_commit or '--')[:7] }}</span>
+      {% if model.source_val_bpb is not none %}
+      <span class="dim" style="margin-left:.5rem;font-size:.7rem">val_bpb:</span>
+      <span class="met">{{ "%.4f"|format(model.source_val_bpb) }}</span>
+      {% endif %}
+    </div>
+    <div style="margin-bottom:1rem">
+      <span class="dim" style="font-size:.75rem">Creating model from best trial... (started {{ model.created_at|timeago }})</span>
+    </div>
+    <form method="post" action="/experiments/{{ experiment.id }}/ui-action/cancel-model" style="display:inline">
+      <button class="btn btn-x btn-s" type="submit">Cancel</button>
+    </form>
+  </div>
+</div>
+
+{% elif model.status == 'completed' %}
+{# Model completed #}
+{% if model.is_outdated %}
+<div class="banner banner-warn">
+  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L1.3 17a1.8 1.8 0 001.5 2.7h15.4a1.8 1.8 0 001.5-2.7L11.4 3a1.8 1.8 0 00-3 0zM11 8.5v3.5M11 15h.01"/></svg>
+  A better trial exists! Model: <span class="mono">{{ "%.4f"|format(model.source_val_bpb) }}</span> &rarr;
+  Best trial: <span class="met">{{ "%.4f"|format(experiment.best_val_bpb) }}</span>
+  <form method="post" action="/experiments/{{ experiment.id }}/ui-action/create-model" style="display:inline;margin-left:.5rem">
+    <button class="btn btn-rq btn-s" type="submit">Recreate Model</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card mb">
+  <div class="ch"><h2>Best Model</h2><span class="badge b-done"><span class="bd"></span>Completed</span></div>
+  <div class="cb">
+    <div class="ei" style="grid-template-columns:1fr 1fr 1fr 1fr">
+      <div>
+        <div class="ei-l">Commit</div>
+        <div class="sha">{{ (model.source_commit or '--')[:7] }}</div>
+      </div>
+      <div>
+        <div class="ei-l">val_bpb</div>
+        <div class="met">{{ "%.4f"|format(model.source_val_bpb) if model.source_val_bpb is not none else '--' }}</div>
+      </div>
+      <div>
+        <div class="ei-l">Duration</div>
+        <div class="mono">{{ model.duration_seconds|duration if model.duration_seconds else '--' }}</div>
+      </div>
+      <div>
+        <div class="ei-l">File Size</div>
+        <div class="mono">{{ model.file_size }}</div>
+      </div>
+    </div>
+    <div class="dim" style="font-size:.68rem">Created {{ model.completed_at|timeago }} &middot; {{ model.model_path }}</div>
+  </div>
+</div>
+
+{# Test interface #}
+<div class="card">
+  <div class="ch"><h2>Test Model</h2><span class="dim" style="font-size:.65rem">autoregressive text generation</span></div>
+  <div class="cb">
+    <form hx-post="/experiments/{{ experiment.id }}/ui-action/generate"
+          hx-target="#gen-output"
+          hx-swap="innerHTML"
+          hx-indicator="#gen-spinner">
+      <div style="margin-bottom:.7rem">
+        <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);display:block;margin-bottom:4px">Prompt</label>
+        <textarea name="prompt" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--brd);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:.8rem;resize:vertical;outline:none" placeholder="Enter text prompt..."></textarea>
+      </div>
+      <div style="display:flex;gap:1rem;align-items:end;margin-bottom:.7rem">
+        <div>
+          <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);display:block;margin-bottom:4px">Temperature</label>
+          <input type="number" name="temperature" value="0.8" min="0" max="2" step="0.1"
+                 style="width:80px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--rs);padding:5px 8px;color:var(--t1);font-family:var(--mono);font-size:.8rem;outline:none">
+        </div>
+        <div>
+          <label style="font-size:.65rem;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);display:block;margin-bottom:4px">Max Tokens</label>
+          <input type="number" name="max_tokens" value="200" min="1" max="2048" step="1"
+                 style="width:80px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--rs);padding:5px 8px;color:var(--t1);font-family:var(--mono);font-size:.8rem;outline:none">
+        </div>
+        <button class="btn btn-cy" type="submit">Generate</button>
+        <span id="gen-spinner" class="htmx-indicator dim" style="font-size:.72rem">Generating...</span>
+      </div>
+    </form>
+    <div id="gen-output">
+      <div class="dim" style="font-size:.75rem;text-align:center;padding:1rem">Generated text will appear here.</div>
+    </div>
+  </div>
+</div>
+
+{% elif model.status == 'failed' %}
+{# Model creation failed #}
+<div class="card mb">
+  <div class="ch"><h2>Model</h2><span class="badge b-fail"><span class="bd"></span>Failed</span></div>
+  <div class="cb">
+    <div style="margin-bottom:.5rem">
+      <span class="dim" style="font-size:.7rem">Source commit:</span>
+      <span class="sha">{{ (model.source_commit or '--')[:7] }}</span>
+    </div>
+    {% if model.error %}
+    <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:var(--rs);padding:.5rem .7rem;font-size:.75rem;color:var(--red);margin-bottom:1rem;font-family:var(--mono);word-break:break-all">{{ model.error }}</div>
+    {% endif %}
+    <form method="post" action="/experiments/{{ experiment.id }}/ui-action/create-model" style="display:inline">
+      <button class="btn btn-go btn-s" type="submit">Retry</button>
+    </form>
+  </div>
+</div>
+
+{% elif model.status == 'cancelled' %}
+{# Model creation was cancelled #}
+<div class="card mb">
+  <div class="ch"><h2>Model</h2><span class="badge b-stop"><span class="bd"></span>Cancelled</span></div>
+  <div class="cb" style="text-align:center;padding:1.5rem">
+    <div class="dim" style="font-size:.8rem;margin-bottom:1rem">Model creation was cancelled.</div>
+    {% if experiment.best_commit %}
+    <form method="post" action="/experiments/{{ experiment.id }}/ui-action/create-model" style="display:inline">
+      <button class="btn btn-go btn-s" type="submit">Create Model</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if tab == 'experiment' %}
+<script>
+(function(){
+  const raw = {{ chart_data|safe }};
+  const labels = raw.map(d => d.index);
+  const data = raw.map(d => d.val_bpb);
+  let best = Infinity;
+  const bestLine = data.map(v => {
+    if (v !== null && v < best) best = v;
+    return best < Infinity ? best : null;
+  });
+  const c = document.getElementById('improvement-chart');
+  if (!c) return;
+  new Chart(c, {
+    type:'line',
+    data:{
+      labels: labels,
+      datasets:[
+        {label:'val_bpb', data:data, borderColor:'rgba(59,130,246,.5)', backgroundColor:'rgba(59,130,246,.03)',
+         pointBackgroundColor: data.map((v,i) => v===null ? 'rgba(239,68,68,.8)' : (v===bestLine[i] && (i===0||bestLine[i]<bestLine[i-1]) ? 'rgba(16,185,129,1)' : 'rgba(59,130,246,.4)')),
+         pointRadius: data.map((v,i) => v===null ? 3.5 : (v===bestLine[i] && (i===0||bestLine[i]<bestLine[i-1]) ? 3.5 : 1.2)),
+         borderWidth:1.3, tension:.3, spanGaps:false, fill:true},
+        {label:'Best so far', data:bestLine, borderColor:'rgba(16,185,129,1)', borderWidth:2, pointRadius:0, tension:.1, fill:false, stepped:'before'}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{intersect:false, mode:'index'},
+      plugins:{
+        legend:{labels:{color:'#94a3b8', font:{size:9, family:'Inter'}}},
+        tooltip:{backgroundColor:'#1e293b', bodyFont:{family:'JetBrains Mono', size:10}, borderColor:'#334155', borderWidth:1}
+      },
+      scales:{
+        x:{title:{display:true, text:'Trial #', color:'#64748b', font:{size:9}}, grid:{color:'rgba(30,41,59,.3)'}, ticks:{color:'#64748b', font:{family:'JetBrains Mono', size:8}}},
+        y:{title:{display:true, text:'val_bpb', color:'#64748b', font:{size:9}}, grid:{color:'rgba(30,41,59,.3)'}, ticks:{color:'#64748b', font:{family:'JetBrains Mono', size:8}}}
+      }
+    }
+  });
+})();
+</script>
+{% elif tab == 'workers' %}
+<script>
+(function(){
+  const raw = {{ worker_counts|safe }};
+  const c = document.getElementById('worker-chart');
+  if (!c || !raw.length) return;
+  const colors = ['rgba(59,130,246,.6)','rgba(139,92,246,.6)','rgba(16,185,129,.6)','rgba(245,158,11,.6)','rgba(6,182,212,.6)','rgba(236,72,153,.6)'];
+  new Chart(c, {
+    type:'bar',
+    data:{
+      labels: raw.map(d => d.name),
+      datasets:[{data: raw.map(d => d.count), backgroundColor: raw.map((_,i) => colors[i % colors.length]), borderRadius:4, borderSkipped:false}]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      plugins:{legend:{display:false}, tooltip:{backgroundColor:'#1e293b', bodyFont:{family:'JetBrains Mono', size:10}, borderColor:'#334155', borderWidth:1}},
+      scales:{
+        x:{grid:{color:'rgba(30,41,59,.3)'}, ticks:{color:'#64748b', font:{family:'JetBrains Mono', size:8}}},
+        y:{grid:{display:false}, ticks:{color:'#94a3b8', font:{family:'Inter', size:9}}}
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

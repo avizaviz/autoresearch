@@ -29,6 +29,9 @@ log = structlog.get_logger()
 _shutdown = threading.Event()
 _running_trial_id: Optional[str] = None
 _running_trial_lock = threading.Lock()
+_current_phase: str = ""
+_training_pct: float = 0.0
+_validation_pct: float = 0.0
 
 COMPLETE_RETRIES = 5
 COMPLETE_RETRY_BACKOFF = 5
@@ -99,7 +102,11 @@ def _heartbeat_loop(client: httpx.Client, server: str, token: Optional[str],
         try:
             with _running_trial_lock:
                 tid = _running_trial_id
-            payload: dict = {}
+            payload: dict = {
+                "current_phase": _current_phase,
+                "training_pct": _training_pct,
+                "validation_pct": _validation_pct,
+            }
             if tid:
                 payload["running_trial_id"] = tid
             client.post(
@@ -107,7 +114,8 @@ def _heartbeat_loop(client: httpx.Client, server: str, token: Optional[str],
                 json=payload,
                 headers=_headers(token),
             )
-            log.debug("worker.heartbeat", worker_id=worker_id, running_trial_id=tid)
+            log.debug("worker.heartbeat", worker_id=worker_id, running_trial_id=tid,
+                       phase=_current_phase, train_pct=_training_pct, val_pct=_validation_pct)
         except Exception as e:
             log.warning("worker.heartbeat_error", error=str(e))
         _shutdown.wait(timeout=interval)
@@ -144,19 +152,33 @@ def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
     )
     log.msg("worker.train_start", pid=proc.pid)
 
+    global _current_phase, _training_pct, _validation_pct
     stdout_lines = []
-    current_phase = "startup"
 
     def _read_stdout():
-        nonlocal current_phase
+        global _current_phase, _training_pct, _validation_pct
         for raw_line in proc.stdout:
             line = raw_line.decode("utf-8", errors="replace").rstrip()
             stdout_lines.append(line)
-            if line.startswith("PHASE: "):
-                current_phase = line[7:].strip()
-                log.msg("worker.phase", phase=current_phase)
+            if line.startswith("PHASE: TRAINING"):
+                _current_phase = "training"
+                _training_pct = 0.0
+                _validation_pct = 0.0
+                log.msg("worker.phase", phase="training")
+            elif line.startswith("PHASE: VALIDATION"):
+                _current_phase = "validation"
+                _training_pct = 100.0
+                _validation_pct = 0.0
+                log.msg("worker.phase", phase="validation")
             elif line.startswith("VALIDATION:"):
-                log.msg("worker.validation_progress", detail=line.strip())
+                m = re.search(r"\((\d+)%\)", line)
+                if m:
+                    _validation_pct = float(m.group(1))
+                log.msg("worker.validation_progress", pct=_validation_pct, detail=line.strip())
+            elif "remaining:" in line and _current_phase == "training":
+                m = re.search(r"\(([0-9.]+)%\)", line)
+                if m:
+                    _training_pct = float(m.group(1))
 
     import threading as _th
     reader = _th.Thread(target=_read_stdout, daemon=True)

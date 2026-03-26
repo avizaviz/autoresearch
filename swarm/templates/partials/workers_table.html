@@ -1,0 +1,44 @@
+{% for w in workers %}
+<tr{% if w.state == 'offline' %} style="opacity:.4"{% endif %}>
+  <td>
+    <div class="wn">
+      <div class="wa" style="background:{{ w.display_name|avatar_gradient }}">{{ w.display_name|initials }}</div>
+      {{ w.display_name }}
+    </div>
+  </td>
+  <td><span class="badge {{ w.state|badge_class }}"><span class="bd"></span>{{ w.state|title }}</span></td>
+  <td>
+    {% if w.current_trial %}
+    <span class="sha">{{ (w.current_trial.git_commit or '')[:7] or '#' ~ w.current_trial.trial_index }}</span>
+    {% if w.current_trial.current_phase %}
+    <div style="font-size:.65rem;margin-top:2px">
+      {% if w.current_trial.current_phase == 'training' %}
+      <span style="color:var(--cyan)">Training {{ "%.0f"|format(w.current_trial.training_pct or 0) }}%</span>
+      {% elif w.current_trial.current_phase == 'validation' %}
+      <span style="color:var(--amber)">Validation {{ "%.0f"|format(w.current_trial.validation_pct or 0) }}%</span>
+      {% else %}
+      <span class="dim">{{ w.current_trial.current_phase }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% elif w.state == 'offline' and w.stuck_trial %}
+    <span class="dim" style="font-size:.65rem">#{{ w.stuck_trial.trial_index }} <span class="badge b-stuck">STUCK</span></span>
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td class="mono">{{ w.trials_done }}</td>
+  <td class="mono">{% if w.avg_duration %}{{ w.avg_duration|duration }}{% else %}--{% endif %}</td>
+  <td>
+    {% if w.best_val_bpb is not none %}
+    <span class="met">{{ "%.4f"|format(w.best_val_bpb) }}</span>
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td class="dim" style="font-size:.65rem{% if w.state == 'offline' %};color:var(--red){% endif %}">{{ w.last_seen_seconds|seconds_ago }}</td>
+  <td class="dim" style="font-size:.65rem">{{ w.gpu or '--' }}</td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="dim" style="text-align:center;padding:2rem">No workers registered.</td></tr>
+{% endfor %}

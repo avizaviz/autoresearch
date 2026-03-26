@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}autoresearch swarm{% endblock %}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="brand"><span class="dot"></span>autoresearch swarm</a>
+  <div class="topbar-r">
+    <div class="pill"><span class="bd" style="background:var(--green)"></span>ONLINE</div>
+    <span>{{ worker_count }} worker{{ "s" if worker_count != 1 }}</span>
+  </div>
+</div>
+
+<div class="wrap">
+  {% block content %}{% endblock %}
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,57 @@
+{% for exp in experiments %}
+<tr class="ck{% if running_id and exp.id != running_id %} fade{% endif %}"
+    onclick="window.location='/experiments/{{ exp.id }}'">
+  <td>
+    <div style="font-weight:600{% if exp.status == 'draft' %};color:var(--t3){% endif %}">{{ exp.name }}</div>
+    <div class="dim" style="font-size:.68rem">{{ exp.created_at|timeago }} · {{ exp.dataset_uri.split('/')[-1] if exp.dataset_uri else 'no dataset' }}</div>
+  </td>
+  <td><span class="badge {{ exp.status|badge_class }}"><span class="bd"></span>{{ exp.status|title }}</span></td>
+  <td>
+    {% if exp.best_val_bpb is not none %}
+    <span class="met">{{ "%.4f"|format(exp.best_val_bpb) }}</span>
+    {% else %}
+    <span class="dim">--</span>
+    {% endif %}
+  </td>
+  <td>
+    {% set tc = exp.trial_counts or {} %}
+    {% if tc %}
+    <span style="color:var(--green)">{{ tc.get('completed', 0) }}</span><span class="dim"> / </span><span style="color:var(--blue)">{{ tc.get('running', 0) }}</span><span class="dim"> / </span><span style="color:var(--amber)">{{ tc.get('queued', 0) }}</span>
+    {% if exp.running_phase %}
+    <div style="font-size:.6rem;margin-top:1px">
+      {% if exp.running_phase == 'training' %}
+      <span style="color:var(--cyan)">Training {{ "%.0f"|format(exp.running_train_pct or 0) }}%</span>
+      {% elif exp.running_phase == 'validation' %}
+      <span style="color:var(--amber)">Validation {{ "%.0f"|format(exp.running_val_pct or 0) }}%</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <span class="dim">0</span>
+    {% endif %}
+  </td>
+  <td class="mono">{{ exp.elapsed or '--' }}</td>
+  <td>
+    {% if exp.status == 'running' %}
+    <form method="post" action="/experiments/{{ exp.id }}/ui-action/stop" onclick="event.stopPropagation()" style="display:inline">
+      <button class="btn btn-x btn-s" type="submit">Stop</button>
+    </form>
+    {% elif exp.status == 'stopped' %}
+    <form method="post" action="/experiments/{{ exp.id }}/ui-action/start" onclick="event.stopPropagation()" style="display:inline">
+      <button class="btn btn-go btn-s"{{ ' disabled title="Stop running experiment first"' if running_id else '' }} type="submit">Resume</button>
+    </form>
+    {% elif exp.status == 'draft' %}
+    <form method="post" action="/experiments/{{ exp.id }}/ui-action/start" onclick="event.stopPropagation()" style="display:inline">
+      <button class="btn btn-go btn-s"{{ ' disabled' if running_id or not exp.dataset_uri else '' }} type="submit">Start</button>
+    </form>
+    {% endif %}
+    {% if exp.status != 'running' %}
+    <form method="post" action="/experiments/{{ exp.id }}/ui-action/delete" onclick="event.stopPropagation(); return confirm('Delete experiment {{ exp.name }}? All trials, models, and files will be permanently removed.')" style="display:inline;margin-left:4px">
+      <button class="btn btn-o btn-s" style="color:var(--red);border-color:rgba(239,68,68,.3)" type="submit">Delete</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="6" class="dim" style="text-align:center;padding:2rem">No experiments yet. Create one above.</td></tr>
+{% endfor %}

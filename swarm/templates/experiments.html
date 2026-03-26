@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Experiments — autoresearch swarm{% endblock %}
+
+{% block content %}
+<div class="stats"
+     hx-get="/partials/stat-boxes"
+     hx-trigger="every 5s"
+     hx-swap="innerHTML">
+  {% include "partials/stat_boxes.html" %}
+</div>
+
+<div class="banner banner-info">
+  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="6"/><path d="M7 4.5v2.5M7 9.5v.5"/></svg>
+  One experiment runs at a time. Stop the active one before starting another.
+</div>
+
+<div id="new-exp-form" class="new-exp-form">
+  <form method="post" action="/experiments/new" enctype="multipart/form-data">
+    <div class="form-row">
+      <div>
+        <label for="name">Experiment Name</label>
+        <input type="text" id="name" name="name" placeholder="e.g. overnight-gpt2-opt" required>
+      </div>
+      <div>
+        <label for="dataset">Dataset File</label>
+        <input type="file" id="dataset" name="dataset">
+      </div>
+      <div>
+        <label for="prompt">Prompt File</label>
+        <input type="file" id="prompt" name="prompt">
+      </div>
+    </div>
+    <div style="margin-bottom:.8rem">
+      <label for="prompt_text">Or paste prompt text</label>
+      <textarea id="prompt_text" name="prompt_text" rows="3" placeholder="Describe the training objective..."></textarea>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-o btn-s" onclick="document.getElementById('new-exp-form').classList.remove('open')">Cancel</button>
+      <button type="submit" class="btn btn-cy btn-s">Create Experiment</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="ch">
+    <h2>All Experiments</h2>
+    <button class="btn btn-o" onclick="document.getElementById('new-exp-form').classList.toggle('open')">+ New Experiment</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Experiment</th>
+        <th>Status</th>
+        <th>Best val_bpb</th>
+        <th>Trials</th>
+        <th>Elapsed</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody hx-get="/partials/experiments-table"
+           hx-trigger="every 5s"
+           hx-swap="innerHTML">
+      {% include "partials/experiments_table.html" %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

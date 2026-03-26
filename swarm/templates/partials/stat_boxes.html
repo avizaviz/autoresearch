@@ -1,0 +1,7 @@
+{% for s in stats %}
+<div class="s {{ s.cls }}">
+  <div class="sl">{{ s.label }}</div>
+  <div class="sv"{% if s.color %} style="color:var(--{{ s.color }})"{% endif %}>{{ s.value }}</div>
+  <div class="ss">{{ s.sub }}</div>
+</div>
+{% endfor %}
