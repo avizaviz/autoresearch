@@ -953,6 +953,41 @@ def delete_experiment(exp_id: str, conn=Depends(db_conn)):
     return {"deleted": True, "experiment_id": exp_id}
 
 
+@app.post("/api/test-experiment")
+def create_test_experiment(conn=Depends(db_conn)):
+    """Create a default test experiment with toy dataset + prompt, ready to start."""
+    exp_id = _short_uuid()
+    now = _now()
+    conn.execute(
+        "INSERT INTO experiments (id, name, created_at, status) VALUES (?, ?, ?, 'draft')",
+        (exp_id, "test-experiment", now),
+    )
+
+    toy_dir = Path(__file__).parent.parent / "tests" / "e2e" / "toy_next_number"
+    dataset_src = toy_dir / "data.jsonl"
+    prompt_src = toy_dir / "prompt.txt"
+
+    if dataset_src.exists():
+        dest_dir = RUNS_DIR / "experiments" / exp_id / "dataset"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        import shutil
+        dest = dest_dir / "data.jsonl"
+        shutil.copy(dataset_src, dest)
+        conn.execute("UPDATE experiments SET dataset_uri = ? WHERE id = ?", (str(dest), exp_id))
+
+    if prompt_src.exists():
+        prompt_text = prompt_src.read_text()
+        conn.execute(
+            "UPDATE experiments SET program_prompt_inline = ?, prompt_uri = 'inline' WHERE id = ?",
+            (prompt_text, exp_id),
+        )
+
+    conn.commit()
+    log.msg("server.test_experiment_created", experiment_id=exp_id)
+    row = conn.execute("SELECT * FROM experiments WHERE id = ?", (exp_id,)).fetchone()
+    return _row_to_dict(row)
+
+
 # ---------------------------------------------------------------------------
 # Claim + Complete (Milestone 4)
 # ---------------------------------------------------------------------------
