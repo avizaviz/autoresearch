@@ -369,8 +369,7 @@ def evaluate_bpb(model, tokenizer, batch_size):
             elapsed = time.time() - t_eval_start
             pct = 100 * (step_i + 1) / steps
             eta = elapsed / (step_i + 1) * (steps - step_i - 1) if step_i > 0 else 0
-            print(f"\rVALIDATION: {step_i+1}/{steps} ({pct:.0f}%) | elapsed: {elapsed:.0f}s | eta: {eta:.0f}s    ", end="", flush=True)
-    print()
+            print(f"VALIDATION: {step_i+1}/{steps} ({pct:.0f}%) | elapsed: {elapsed:.0f}s | eta: {eta:.0f}s", flush=True)
     return total_nats / (math.log(2) * total_bytes)
 
 # ---------------------------------------------------------------------------
