@@ -232,10 +232,20 @@ def _complete_trial(client: httpx.Client, server: str, token: Optional[str],
                 json=payload,
                 headers=_headers(token),
             )
+            if resp.status_code == 404:
+                log.warning("worker.complete_trial_not_found", trial_id=trial_id)
+                return True
             resp.raise_for_status()
             log.msg("worker.complete", trial_id=trial_id, exit_code=exit_code,
                     val_bpb=val_bpb)
             return True
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                log.warning("worker.complete_trial_not_found", trial_id=trial_id)
+                return True
+            log.warning("worker.complete_retry", attempt=attempt + 1, error=str(e),
+                        trial_id=trial_id)
+            time.sleep(COMPLETE_RETRY_BACKOFF * (attempt + 1))
         except Exception as e:
             log.warning("worker.complete_retry", attempt=attempt + 1, error=str(e),
                         trial_id=trial_id)
