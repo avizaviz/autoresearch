@@ -33,6 +33,7 @@ _current_phase: str = ""
 _training_pct: float = 0.0
 _validation_pct: float = 0.0
 _worker_repo_path: Optional[Path] = None
+_running_process: Optional[subprocess.Popen] = None
 
 
 def _read_status_file(repo: Path):
@@ -138,13 +139,21 @@ def _heartbeat_loop(client: httpx.Client, server: str, token: Optional[str],
             }
             if tid:
                 payload["running_trial_id"] = tid
-            client.post(
+            resp = client.post(
                 f"{server}/api/workers/{worker_id}/heartbeat",
                 json=payload,
                 headers=_headers(token),
             )
             log.debug("worker.heartbeat", worker_id=worker_id, running_trial_id=tid,
                        phase=_current_phase, train_pct=_training_pct, val_pct=_validation_pct)
+            if tid and resp.status_code == 200:
+                data = resp.json()
+                if data.get("trial_exists") is False:
+                    log.warning("worker.trial_deleted_killing_process", trial_id=tid)
+                    proc = _running_process
+                    if proc and proc.poll() is None:
+                        proc.kill()
+                        log.msg("worker.process_killed", trial_id=tid)
         except Exception as e:
             log.warning("worker.heartbeat_error", error=str(e))
         _shutdown.wait(timeout=interval)
@@ -177,9 +186,11 @@ def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
     train_script = os.environ.get("SWARM_TRAIN_SCRIPT", "train.py")
     cmd = [str(venv_python), train_script] if venv_python.exists() else ["python", train_script]
 
+    global _running_process
     proc = subprocess.Popen(
         cmd, cwd=str(repo), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
+    _running_process = proc
     log.msg("worker.train_start", pid=proc.pid)
 
     try:
@@ -207,6 +218,7 @@ def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
     except Exception:
         pass
 
+    _running_process = None
     log.msg("worker.train_done", exit_code=exit_code, val_bpb=val_bpb)
     return exit_code, val_bpb, stderr_tail
 

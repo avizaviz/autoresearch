@@ -687,17 +687,22 @@ def worker_heartbeat(worker_id: str, body: dict, conn=Depends(db_conn)):
     now = _now()
     conn.execute("UPDATE workers SET last_seen_at = ? WHERE id = ?", (now, worker_id))
     running_trial_id = body.get("running_trial_id")
+    trial_exists = True
     if running_trial_id:
-        phase = body.get("current_phase", "")
-        train_pct = body.get("training_pct", 0)
-        val_pct = body.get("validation_pct", 0)
-        conn.execute(
-            """UPDATE trials SET last_heartbeat_at = ?, current_phase = ?,
-               training_pct = ?, validation_pct = ? WHERE id = ?""",
-            (now, phase, train_pct, val_pct, running_trial_id),
-        )
+        trial = conn.execute("SELECT id FROM trials WHERE id = ?", (running_trial_id,)).fetchone()
+        if trial:
+            phase = body.get("current_phase", "")
+            train_pct = body.get("training_pct", 0)
+            val_pct = body.get("validation_pct", 0)
+            conn.execute(
+                """UPDATE trials SET last_heartbeat_at = ?, current_phase = ?,
+                   training_pct = ?, validation_pct = ? WHERE id = ?""",
+                (now, phase, train_pct, val_pct, running_trial_id),
+            )
+        else:
+            trial_exists = False
     conn.commit()
-    return {"status": "ok"}
+    return {"status": "ok", "trial_exists": trial_exists}
 
 
 @app.get("/api/workers")
