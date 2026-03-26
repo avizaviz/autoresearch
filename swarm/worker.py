@@ -32,6 +32,28 @@ _running_trial_lock = threading.Lock()
 _current_phase: str = ""
 _training_pct: float = 0.0
 _validation_pct: float = 0.0
+_worker_repo_path: Optional[Path] = None
+
+
+def _read_status_file(repo: Path):
+    """Read .swarm_train_status.json written by train.py/prepare.py."""
+    global _current_phase, _training_pct, _validation_pct
+    status_file = repo / ".swarm_train_status.json"
+    try:
+        if status_file.exists():
+            import json
+            data = json.loads(status_file.read_text())
+            phase = data.get("phase", "")
+            pct = data.get("pct", 0)
+            if phase == "training":
+                _current_phase = "training"
+                _training_pct = pct
+            elif phase == "validation":
+                _current_phase = "validation"
+                _training_pct = 100.0
+                _validation_pct = pct
+    except Exception:
+        pass
 
 COMPLETE_RETRIES = 5
 COMPLETE_RETRY_BACKOFF = 5
@@ -102,6 +124,8 @@ def _heartbeat_loop(client: httpx.Client, server: str, token: Optional[str],
         try:
             with _running_trial_lock:
                 tid = _running_trial_id
+            if _worker_repo_path:
+                _read_status_file(_worker_repo_path)
             payload: dict = {
                 "current_phase": _current_phase,
                 "training_pct": _training_pct,
@@ -140,7 +164,9 @@ def _git_fetch_checkout(repo: Path, git_ref: Optional[str],
 
 
 def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
-    """Run train.py. Returns (exit_code, val_bpb, stderr_tail)."""
+    """Run train.py. Returns (exit_code, val_bpb, stderr_tail).
+    Progress is tracked via .swarm_train_status.json file (read by heartbeat).
+    """
     timeout = int(os.environ.get("TRAIN_TIMEOUT", "1800"))
     venv_python = repo / ".venv" / "bin" / "python"
     train_script = os.environ.get("SWARM_TRAIN_SCRIPT", "train.py")
@@ -148,65 +174,35 @@ def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
 
     proc = subprocess.Popen(
         cmd, cwd=str(repo), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
     log.msg("worker.train_start", pid=proc.pid)
 
-    global _current_phase, _training_pct, _validation_pct
-    stdout_lines = []
-
-    def _read_stdout():
-        global _current_phase, _training_pct, _validation_pct
-        for raw_line in proc.stdout:
-            line = raw_line.decode("utf-8", errors="replace").rstrip()
-            stdout_lines.append(line)
-            if line.startswith("PHASE: TRAINING"):
-                _current_phase = "training"
-                _training_pct = 0.0
-                _validation_pct = 0.0
-                log.msg("worker.phase", phase="training")
-            elif line.startswith("PHASE: VALIDATION"):
-                _current_phase = "validation"
-                _training_pct = 100.0
-                _validation_pct = 0.0
-                log.msg("worker.phase", phase="validation")
-            elif line.startswith("VALIDATION:"):
-                m = re.search(r"\((\d+)%\)", line)
-                if m:
-                    _validation_pct = float(m.group(1))
-                log.msg("worker.validation_progress", pct=_validation_pct, detail=line.strip())
-            elif line.startswith("TRAINING:"):
-                m = re.search(r"\((\d+)%\)", line)
-                if m:
-                    _training_pct = float(m.group(1))
-                log.msg("worker.training_progress", pct=_training_pct, detail=line.strip())
-
-    import threading as _th
-    reader = _th.Thread(target=_read_stdout, daemon=True)
-    reader.start()
-
     try:
-        proc.wait(timeout=timeout)
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.wait()
+        stdout_bytes, stderr_bytes = proc.communicate()
         log.warning("worker.train_timeout", pid=proc.pid, timeout=timeout)
 
-    reader.join(timeout=5)
-    stderr_bytes = proc.stderr.read()
-
     exit_code = proc.returncode
-    stdout_text = "\n".join(stdout_lines)
+    stdout_text = stdout_bytes.decode("utf-8", errors="replace")
     stderr_text = stderr_bytes.decode("utf-8", errors="replace")
     stderr_tail = stderr_text[-2000:]
 
     val_bpb = None
-    for line in stdout_lines:
+    for line in stdout_text.splitlines():
         m = re.match(r"^val_bpb:\s+([0-9.]+)", line)
         if m:
             val_bpb = float(m.group(1))
 
-    log.msg("worker.train_done", exit_code=exit_code, val_bpb=val_bpb, phase=current_phase)
+    # Clean up status file
+    status_file = repo / ".swarm_train_status.json"
+    try:
+        status_file.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    log.msg("worker.train_done", exit_code=exit_code, val_bpb=val_bpb)
     return exit_code, val_bpb, stderr_tail
 
 
@@ -260,9 +256,10 @@ def main(
     claim_interval: int = typer.Option(5, "--claim-interval"),
     once: bool = typer.Option(False, "--once", help="Run one trial then exit"),
 ):
-    global _running_trial_id
+    global _running_trial_id, _worker_repo_path
     configure_logging()
     repo_path = Path(repo).resolve()
+    _worker_repo_path = repo_path
 
     client = httpx.Client(timeout=30)
 

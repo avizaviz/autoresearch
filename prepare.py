@@ -358,6 +358,7 @@ def evaluate_bpb(model, tokenizer, batch_size):
     total_nats = 0.0
     total_bytes = 0
     t_eval_start = time.time()
+    status_path = os.path.join(os.getcwd(), ".swarm_train_status.json")
     for step_i in range(steps):
         x, y, _ = next(val_loader)
         loss_flat = model(x, y, reduction='none').view(-1)
@@ -366,11 +367,22 @@ def evaluate_bpb(model, tokenizer, batch_size):
         mask = nbytes > 0
         total_nats += (loss_flat * mask).sum().item()
         total_bytes += nbytes.sum().item()
-        if (step_i + 1) % max(1, steps // 10) == 0 or step_i == steps - 1:
+        if (step_i + 1) % max(1, steps // 20) == 0 or step_i == steps - 1:
             elapsed = time.time() - t_eval_start
             pct = 100 * (step_i + 1) / steps
             eta = elapsed / (step_i + 1) * (steps - step_i - 1) if step_i > 0 else 0
-            print(f"VALIDATION: {step_i+1}/{steps} ({pct:.0f}%) | elapsed: {elapsed:.0f}s | eta: {eta:.0f}s", flush=True)
+            try:
+                import json as _json
+                with open(status_path, "w") as _f:
+                    _json.dump({"phase": "validation", "pct": round(pct, 1),
+                                "step": step_i + 1, "total_steps": steps,
+                                "elapsed": round(elapsed), "eta": round(eta)}, _f)
+            except Exception:
+                pass
+    try:
+        os.remove(status_path)
+    except Exception:
+        pass
     return total_nats / (math.log(2) * total_bytes)
 
 # ---------------------------------------------------------------------------

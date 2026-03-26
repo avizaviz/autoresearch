@@ -575,7 +575,17 @@ def get_weight_decay(progress):
 # Training loop
 # ---------------------------------------------------------------------------
 
+import json as _json
+_status_path = os.path.join(os.getcwd(), ".swarm_train_status.json")
+def _write_status(phase, pct, **kw):
+    try:
+        with open(_status_path, "w") as _f:
+            _json.dump({"phase": phase, "pct": round(pct, 1), **kw}, _f)
+    except Exception:
+        pass
+
 print("PHASE: TRAINING", flush=True)
+_write_status("training", 0)
 t_start_training = time.time()
 smooth_train_loss = 0
 total_training_time = 0
@@ -638,6 +648,7 @@ while True:
 
     if step % 10 == 0:
         print(f"\nTRAINING: step {step} ({pct_done:.0f}%) | loss: {debiased_smooth_loss:.4f} | remaining: {remaining:.0f}s", flush=True)
+        _write_status("training", pct_done, step=step, remaining=int(remaining))
 
     # GC management (Python's GC causes ~500ms stalls)
     if step == 0:
@@ -662,6 +673,7 @@ EVAL_BATCH_SIZE = DEVICE_BATCH_SIZE if DEVICE_TYPE == "cuda" else min(32, DEVICE
 from prepare import EVAL_TOKENS as _EVAL_TOKENS
 eval_steps = _EVAL_TOKENS // (EVAL_BATCH_SIZE * MAX_SEQ_LEN)
 print(f"PHASE: VALIDATION ({eval_steps} steps, batch_size={EVAL_BATCH_SIZE})", flush=True)
+_write_status("validation", 0, total_steps=eval_steps)
 model.eval()
 with autocast_ctx:
     val_bpb = evaluate_bpb(model, tokenizer, EVAL_BATCH_SIZE)
