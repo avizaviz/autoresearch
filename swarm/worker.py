@@ -45,9 +45,14 @@ def _read_status_file(repo: Path):
             data = json.loads(status_file.read_text())
             phase = data.get("phase", "")
             pct = data.get("pct", 0)
-            if phase == "training":
+            if phase == "warmup":
+                _current_phase = "warmup"
+                _training_pct = 0.0
+                _validation_pct = 0.0
+            elif phase == "training":
                 _current_phase = "training"
                 _training_pct = pct
+                _validation_pct = 0.0
             elif phase == "validation":
                 _current_phase = "validation"
                 _training_pct = 100.0

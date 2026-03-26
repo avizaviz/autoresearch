@@ -54,7 +54,9 @@
   </td>
   <td class="dim" style="font-size:.65rem">
     {% if t.status == 'running' %}
-      {% if t.current_phase == 'training' %}
+      {% if t.current_phase == 'warmup' %}
+      <span style="color:var(--purple)">Warmup {{ "%.0f"|format(t.training_pct or 0) }}%</span>
+      {% elif t.current_phase == 'training' %}
       <span style="color:var(--cyan)">Training {{ "%.0f"|format(t.training_pct or 0) }}%</span>
       {% elif t.current_phase == 'validation' %}
       <span style="color:var(--amber)">Validation {{ "%.0f"|format(t.validation_pct or 0) }}%</span>

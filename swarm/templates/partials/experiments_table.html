@@ -19,7 +19,9 @@
     <span style="color:var(--green)">{{ tc.get('completed', 0) }}</span><span class="dim"> / </span><span style="color:var(--blue)">{{ tc.get('running', 0) }}</span><span class="dim"> / </span><span style="color:var(--amber)">{{ tc.get('queued', 0) }}</span>
     {% if exp.running_phase %}
     <div style="font-size:.6rem;margin-top:1px">
-      {% if exp.running_phase == 'training' %}
+      {% if exp.running_phase == 'warmup' %}
+      <span style="color:var(--purple)">Warmup</span>
+      {% elif exp.running_phase == 'training' %}
       <span style="color:var(--cyan)">Training {{ "%.0f"|format(exp.running_train_pct or 0) }}%</span>
       {% elif exp.running_phase == 'validation' %}
       <span style="color:var(--amber)">Validation {{ "%.0f"|format(exp.running_val_pct or 0) }}%</span>

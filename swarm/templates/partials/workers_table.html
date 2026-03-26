@@ -12,7 +12,9 @@
     <span class="sha">{{ (w.current_trial.git_commit or '')[:7] or '#' ~ w.current_trial.trial_index }}</span>
     {% if w.current_trial.current_phase %}
     <div style="font-size:.65rem;margin-top:2px">
-      {% if w.current_trial.current_phase == 'training' %}
+      {% if w.current_trial.current_phase == 'warmup' %}
+      <span style="color:var(--purple)">Warmup {{ "%.0f"|format(w.current_trial.training_pct or 0) }}%</span>
+      {% elif w.current_trial.current_phase == 'training' %}
       <span style="color:var(--cyan)">Training {{ "%.0f"|format(w.current_trial.training_pct or 0) }}%</span>
       {% elif w.current_trial.current_phase == 'validation' %}
       <span style="color:var(--amber)">Validation {{ "%.0f"|format(w.current_trial.validation_pct or 0) }}%</span>

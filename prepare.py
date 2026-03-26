@@ -367,18 +367,17 @@ def evaluate_bpb(model, tokenizer, batch_size):
         mask = nbytes > 0
         total_nats += (loss_flat * mask).sum().item()
         total_bytes += nbytes.sum().item()
-        if (step_i + 1) % max(1, steps // 20) == 0 or step_i == steps - 1:
-            elapsed = time.time() - t_eval_start
-            pct = 100 * (step_i + 1) / steps
-            eta = elapsed / (step_i + 1) * (steps - step_i - 1) if step_i > 0 else 0
-            try:
-                import json as _json
-                with open(status_path, "w") as _f:
-                    _json.dump({"phase": "validation", "pct": round(pct, 1),
-                                "step": step_i + 1, "total_steps": steps,
-                                "elapsed": round(elapsed), "eta": round(eta)}, _f)
-            except Exception:
-                pass
+        elapsed = time.time() - t_eval_start
+        pct = 100 * (step_i + 1) / steps
+        eta = elapsed / (step_i + 1) * (steps - step_i - 1) if step_i > 0 else 0
+        try:
+            import json as _json
+            with open(status_path, "w") as _f:
+                _json.dump({"phase": "validation", "pct": round(pct, 1),
+                            "step": step_i + 1, "total_steps": steps,
+                            "elapsed": round(elapsed), "eta": round(eta)}, _f)
+        except Exception:
+            pass
     try:
         os.remove(status_path)
     except Exception:

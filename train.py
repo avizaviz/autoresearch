@@ -584,8 +584,9 @@ def _write_status(phase, pct, **kw):
     except Exception:
         pass
 
-print("PHASE: TRAINING", flush=True)
-_write_status("training", 0)
+WARMUP_STEPS = 10
+print("PHASE: WARMUP", flush=True)
+_write_status("warmup", 0, step=0, total_steps=WARMUP_STEPS)
 t_start_training = time.time()
 smooth_train_loss = 0
 total_training_time = 0
@@ -632,7 +633,7 @@ while True:
     t1 = time.time()
     dt = t1 - t0
 
-    if step > 10:
+    if step > WARMUP_STEPS:
         total_training_time += dt
 
     # Logging
@@ -640,13 +641,19 @@ while True:
     smooth_train_loss = ema_beta * smooth_train_loss + (1 - ema_beta) * train_loss_f
     debiased_smooth_loss = smooth_train_loss / (1 - ema_beta**(step + 1))
     pct_done = 100 * progress
-    tok_per_sec = int(TOTAL_BATCH_SIZE / dt)
-    mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE / dt / H100_BF16_PEAK_FLOPS
     remaining = max(0, TIME_BUDGET - total_training_time)
 
-    print(f"\rstep {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.1f}% | epoch: {epoch} | remaining: {remaining:.0f}s    ", end="", flush=True)
-
-    if step % 10 == 0:
+    # Phase + progress — every step
+    if step <= WARMUP_STEPS:
+        warmup_pct = 100 * step / WARMUP_STEPS
+        phase_name = "warmup"
+        phase_pct = warmup_pct
+        print(f"\nWARMUP: step {step}/{WARMUP_STEPS} ({warmup_pct:.0f}%) | loss: {debiased_smooth_loss:.4f} | dt: {dt*1000:.0f}ms", flush=True)
+        _write_status("warmup", warmup_pct, step=step, total_steps=WARMUP_STEPS)
+        if step == WARMUP_STEPS:
+            print("PHASE: TRAINING", flush=True)
+            _write_status("training", 0, step=step, remaining=int(remaining))
+    else:
         print(f"\nTRAINING: step {step} ({pct_done:.0f}%) | loss: {debiased_smooth_loss:.4f} | remaining: {remaining:.0f}s", flush=True)
         _write_status("training", pct_done, step=step, remaining=int(remaining))
 
@@ -661,7 +668,7 @@ while True:
     step += 1
 
     # Time's up — but only stop after warmup steps so we don't count compilation
-    if step > 10 and total_training_time >= TIME_BUDGET:
+    if step > WARMUP_STEPS and total_training_time >= TIME_BUDGET:
         break
 
 print()  # newline after \r training log
