@@ -349,6 +349,9 @@ def main(
                            f"git checkout failed: {e}", None, worker_id)
             with _running_trial_lock:
                 _running_trial_id = None
+                _current_phase = ""
+                _training_pct = 0.0
+                _validation_pct = 0.0
             continue
 
         # --- Train ---
@@ -362,6 +365,14 @@ def main(
 
         with _running_trial_lock:
             _running_trial_id = None
+            _current_phase = ""
+            _training_pct = 0.0
+            _validation_pct = 0.0
+        status_file = repo_path / ".swarm_train_status.json"
+        try:
+            status_file.unlink(missing_ok=True)
+        except Exception:
+            pass
 
         if once:
             log.msg("worker.once_mode_done", trial_id=trial_id, val_bpb=val_bpb)
