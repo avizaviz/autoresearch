@@ -676,7 +676,7 @@ print()  # newline after \r training log
 total_tokens = step * TOTAL_BATCH_SIZE
 
 # Final eval — use larger batch for eval (no gradient memory needed)
-EVAL_BATCH_SIZE = DEVICE_BATCH_SIZE if DEVICE_TYPE == "cuda" else min(32, DEVICE_BATCH_SIZE * 8)
+EVAL_BATCH_SIZE = DEVICE_BATCH_SIZE if DEVICE_TYPE == "cuda" else 8
 from prepare import EVAL_TOKENS as _EVAL_TOKENS
 eval_steps = _EVAL_TOKENS // (EVAL_BATCH_SIZE * MAX_SEQ_LEN)
 print(f"PHASE: VALIDATION ({eval_steps} steps, batch_size={EVAL_BATCH_SIZE})", flush=True)
