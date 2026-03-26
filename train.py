@@ -636,6 +636,9 @@ while True:
 
     print(f"\rstep {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.1f}% | epoch: {epoch} | remaining: {remaining:.0f}s    ", end="", flush=True)
 
+    if step % 10 == 0:
+        print(f"\nTRAINING: step {step} ({pct_done:.0f}%) | loss: {debiased_smooth_loss:.4f} | remaining: {remaining:.0f}s", flush=True)
+
     # GC management (Python's GC causes ~500ms stalls)
     if step == 0:
         gc.collect()

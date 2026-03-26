@@ -175,10 +175,11 @@ def _run_train(repo: Path) -> tuple[int, Optional[float], str]:
                 if m:
                     _validation_pct = float(m.group(1))
                 log.msg("worker.validation_progress", pct=_validation_pct, detail=line.strip())
-            elif "remaining:" in line and _current_phase == "training":
-                m = re.search(r"\(([0-9.]+)%\)", line)
+            elif line.startswith("TRAINING:"):
+                m = re.search(r"\((\d+)%\)", line)
                 if m:
                     _training_pct = float(m.group(1))
+                log.msg("worker.training_progress", pct=_training_pct, detail=line.strip())
 
     import threading as _th
     reader = _th.Thread(target=_read_stdout, daemon=True)
