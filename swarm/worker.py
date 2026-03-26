@@ -47,7 +47,7 @@ def _read_status_file(repo: Path):
             pct = data.get("pct", 0)
             if phase == "warmup":
                 _current_phase = "warmup"
-                _training_pct = 0.0
+                _training_pct = pct
                 _validation_pct = 0.0
             elif phase == "training":
                 _current_phase = "training"
