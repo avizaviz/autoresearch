@@ -575,6 +575,7 @@ def get_weight_decay(progress):
 # Training loop
 # ---------------------------------------------------------------------------
 
+print("PHASE: TRAINING", flush=True)
 t_start_training = time.time()
 smooth_train_loss = 0
 total_training_time = 0
@@ -655,6 +656,8 @@ total_tokens = step * TOTAL_BATCH_SIZE
 
 # Final eval — use larger batch for eval (no gradient memory needed)
 EVAL_BATCH_SIZE = DEVICE_BATCH_SIZE if DEVICE_TYPE == "cuda" else min(32, DEVICE_BATCH_SIZE * 8)
+eval_steps = (40 * 524288) // (EVAL_BATCH_SIZE * MAX_SEQ_LEN)
+print(f"PHASE: VALIDATION ({eval_steps} steps, batch_size={EVAL_BATCH_SIZE})", flush=True)
 model.eval()
 with autocast_ctx:
     val_bpb = evaluate_bpb(model, tokenizer, EVAL_BATCH_SIZE)

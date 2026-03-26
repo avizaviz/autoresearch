@@ -356,7 +356,8 @@ def evaluate_bpb(model, tokenizer, batch_size):
     steps = EVAL_TOKENS // (batch_size * MAX_SEQ_LEN)
     total_nats = 0.0
     total_bytes = 0
-    for _ in range(steps):
+    t_eval_start = time.time()
+    for step_i in range(steps):
         x, y, _ = next(val_loader)
         loss_flat = model(x, y, reduction='none').view(-1)
         y_flat = y.view(-1)
@@ -364,6 +365,12 @@ def evaluate_bpb(model, tokenizer, batch_size):
         mask = nbytes > 0
         total_nats += (loss_flat * mask).sum().item()
         total_bytes += nbytes.sum().item()
+        if (step_i + 1) % max(1, steps // 10) == 0 or step_i == steps - 1:
+            elapsed = time.time() - t_eval_start
+            pct = 100 * (step_i + 1) / steps
+            eta = elapsed / (step_i + 1) * (steps - step_i - 1) if step_i > 0 else 0
+            print(f"\rVALIDATION: {step_i+1}/{steps} ({pct:.0f}%) | elapsed: {elapsed:.0f}s | eta: {eta:.0f}s    ", end="", flush=True)
+    print()
     return total_nats / (math.log(2) * total_bytes)
 
 # ---------------------------------------------------------------------------
