@@ -1,0 +1,43 @@
+---
+description: Autoresearch swarm architecture — one experiment at a time, agent-driven trials, CLI + UI parity
+alwaysApply: true
+---
+
+# Swarm Architecture
+
+## Core constraints
+
+- **One experiment running at a time** — `POST /start` returns 409 if another is running
+- **Agent produces new code between trials** — refill invokes agent runner (cursor-agent or shell), never creates dummy/duplicate trials
+- **Workers run real `train.py`** — ~5-20 min per trial on MPS, not toy scripts
+- **CLI and UI must be equivalent** — every UI action has a `curl` equivalent; test both
+
+## Key files
+
+- `swarm/orchestrator.py` — FastAPI server, all API endpoints + UI routes + background tasks
+- `swarm/worker.py` — worker process (register, heartbeat, claim, train, complete)
+- `swarm/agent.py` — agent runner interface (CursorAgentRunner, ShellAgentRunner, NoopAgentRunner)
+- `swarm/schema.sql` — SQLite schema (workers, experiments, trials)
+- `swarm/db.py` — database helper
+- `swarm/templates/` — Jinja2 + HTMX templates
+- `swarm/static/style.css` — dark theme CSS
+
+## API response conventions
+
+- Errors: `{"error": "<code>", "detail": "<message>"}` for all 4xx/5xx
+- Trials list: `{"trials": [...], "page": 1, "per_page": 50, "total": N, "total_pages": M}` (paginated)
+- Timestamps: ISO 8601 UTC
+- Structlog events: use exact event names (e.g. `server.trial_completed`, `worker.claimed`)
+
+## Plans location
+
+- Phase 1 (API + CLI): `docs/plans/fork_viz_+_swarm_f1f60bbf.plan.md`
+- Phase 2 (UI): `docs/plans/swarm_ui_dashboard.plan.md`
+- Agent runner: `.cursor/plans/agent_runner_+_real_e2e_86454343.plan.md`
+- UI mockup: `docs/ui-mockup.html`
+
+## Git hygiene
+
+- Agent commits go on `autoresearch/<name>` branches, never on `main`
+- `feature/swarm-v1` is the current development branch
+- Experiment's `git_ref` should match the research branch, not `main`

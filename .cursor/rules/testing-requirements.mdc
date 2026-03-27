@@ -1,0 +1,60 @@
+---
+description: Testing requirements for the autoresearch swarm project — every feature needs CLI + Playwright tests, no mocks in production paths
+alwaysApply: true
+---
+
+# Testing Requirements
+
+Every new feature or change in this project MUST be tested at TWO levels before it is considered done:
+
+## 1. CLI test (API-level)
+
+- Test the feature via HTTP API using `httpx` / `TestClient` in `tests/test_api.py`
+- No browser needed — pure request/response assertions
+- Must run fast (seconds, not minutes)
+- Include in the default `pytest` run
+
+## 2. Playwright test (browser UI)
+
+- Test the same feature through the browser UI in `tests/test_ui_playwright.py`
+- Uses `pytest-playwright` with headless Chromium
+- Verifies the UI reflects the API state correctly
+- Marked with `@pytest.mark.ui`
+
+## No mocks in production paths
+
+- NEVER use mock data, toy scripts, or fake env vars to bridge gaps in the real flow
+- Toy scripts (`SWARM_E2E_FAKE_TRAIN`, `SWARM_TRAIN_SCRIPT`) are ONLY for CI speed — they must NOT be the only way features are tested
+- If a feature can't work without a mock, it means the feature is incomplete — fix the implementation, don't hide it with a mock
+- Real training on this Mac uses MPS (Metal) — torch works, `train.py` runs in ~5-20 min
+
+## Test tiers
+
+| Tier | Marker | What | When to run |
+|------|--------|------|-------------|
+| Fast (CLI + API) | default | `tests/test_api.py`, `test_agent.py`, `test_git_ops.py`, `test_stale.py` | Every change |
+| E2E golden path | `@pytest.mark.e2e` | `test_e2e.py` — subprocess orchestrator + worker | Every change |
+| Playwright UI | `@pytest.mark.ui` | `test_ui_playwright.py` — browser tests | Every UI change |
+| Real training | `@pytest.mark.slow` | `test_real_training.py` — real `train.py` on GPU | Before release |
+| Full loop | `@pytest.mark.loop` | `test_full_loop.py` — agent + real training | Before release |
+
+## Run commands
+
+```bash
+# Fast tests (every change)
+.venv/bin/python -m pytest tests/ -v -k "not slow and not loop"
+
+# Just Playwright
+.venv/bin/python -m pytest tests/test_ui_playwright.py -v
+
+# Everything except GPU-dependent
+.venv/bin/python -m pytest tests/ -v -k "not slow and not loop"
+```
+
+## What we learned the hard way
+
+1. The refill loop was creating dummy trials with the same git_ref — hiding the fact that the agent runner was missing entirely
+2. Duration formatting showed "0s" because `int(0.6)` rounds to 0 — always test with real-scale data
+3. The `create_experiment` API hardcoded `git_ref='main'` — test with custom values, not just defaults
+4. `SWARM_TRAIN_SCRIPT` made the toy script work but hid that real `train.py` (which needs torch/MPS) was never tested
+5. The E2E test used an isolated toy repo — it passed, but real usage on the project repo failed because of different `train.py`

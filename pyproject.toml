@@ -16,9 +16,35 @@ dependencies = [
     "torch==2.9.1",
 ]
 
+[project.optional-dependencies]
+swarm = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "typer>=0.15.0",
+    "structlog>=24.4.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "httpx>=0.28.0",
+]
+
+[project.scripts]
+swarm-orchestrator = "swarm.orchestrator:cli_main"
+swarm-worker = "swarm.worker:cli_main"
+
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cu128" },
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests",
+    "slow: slow tests requiring real GPU training",
+    "loop: very slow full-loop tests",
+    "ui: Playwright browser UI tests",
 ]
 
 [[tool.uv.index]]

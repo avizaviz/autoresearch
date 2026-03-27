@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>autoresearch swarm — dashboard v4</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e17;--bg2:#111827;--bg3:#151f30;--brd:#1e293b;--t1:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--blue:#3b82f6;--cyan:#06b6d4;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--r:12px;--rs:8px;--mono:'JetBrains Mono',monospace;--sans:'Inter',-apple-system,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.6;min-height:100vh}
+
+.topbar{background:linear-gradient(180deg,#0f1629,var(--bg));border-bottom:1px solid var(--brd);padding:0 2rem;display:flex;align-items:center;height:50px;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.brand{font-family:var(--mono);font-weight:700;font-size:1rem;color:var(--cyan);display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 8px var(--green);animation:p 2s infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
+.topbar-r{margin-left:auto;display:flex;align-items:center;gap:1.25rem;font-size:.72rem;color:var(--t3);font-family:var(--mono)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:16px;font-size:.68rem;font-weight:600;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);color:var(--green)}
+
+.wrap{max-width:1400px;margin:0 auto;padding:1.25rem 2rem}
+
+/* ─── STAT BOXES (identical everywhere) ─── */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.7rem;margin-bottom:1rem}
+.s{background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r);padding:.85rem 1rem;position:relative;overflow:hidden}
+.s::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:.6}
+.s.sc::before{background:var(--cyan)}.s.sg::before{background:var(--green)}.s.sa::before{background:var(--amber)}.s.sb::before{background:var(--blue)}.s.sr::before{background:var(--red)}
+.sl{font-size:.62rem;text-transform:uppercase;letter-spacing:.9px;color:var(--t3);margin-bottom:.25rem}
+.sv{font-family:var(--mono);font-size:1.4rem;font-weight:700;line-height:1}
+.ss{font-size:.67rem;color:var(--t2);margin-top:.2rem}
+
+/* ─── BACK + TABS ROW ─── */
+.nav-row{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;border-bottom:1px solid var(--brd);padding-bottom:.5rem}
+.back{display:flex;align-items:center;gap:5px;color:var(--t2);font-size:.8rem;cursor:pointer;padding:4px 8px;border-radius:var(--rs);transition:all .12s;border:none;background:none;font-family:var(--sans)}
+.back:hover{color:var(--cyan);background:rgba(6,182,212,.06)}
+.back svg{width:14px;height:14px}
+.sep{width:1px;height:20px;background:var(--brd);margin:0 .35rem}
+.tab{padding:5px 16px;border-radius:var(--rs);font-size:.8rem;font-weight:500;color:var(--t2);cursor:pointer;border:none;background:none;font-family:var(--sans);transition:all .12s}
+.tab:hover{color:var(--t1);background:rgba(255,255,255,.04)}
+.tab.on{color:var(--cyan);background:rgba(6,182,212,.1)}
+
+/* ─── CARDS ─── */
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r);overflow:hidden}
+.ch{padding:.7rem 1.1rem;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between}
+.ch h2{font-size:.85rem;font-weight:600}
+.cb{padding:1.1rem}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{text-align:left;padding:.55rem .85rem;font-size:.6rem;text-transform:uppercase;letter-spacing:.9px;color:var(--t3);border-bottom:1px solid var(--brd);font-weight:600}
+td{padding:.55rem .85rem;border-bottom:1px solid rgba(30,41,59,.4);vertical-align:middle}
+tr.ck{cursor:pointer}tr.ck:hover td{background:var(--bg3)}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:16px;font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.bd{width:5px;height:5px;border-radius:50%;background:currentColor}
+.b-run{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.b-done{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.b-fail{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.b-stop{background:rgba(100,116,139,.15);color:var(--t2);border:1px solid rgba(100,116,139,.3)}
+.b-draft{background:rgba(100,116,139,.08);color:var(--t3);border:1px solid rgba(100,116,139,.15)}
+.b-train{background:rgba(6,182,212,.15);color:var(--cyan);border:1px solid rgba(6,182,212,.3)}
+.b-off{background:rgba(100,116,139,.1);color:var(--t3);border:1px solid rgba(100,116,139,.2)}
+.b-stuck{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+
+.btn{padding:5px 14px;border-radius:var(--rs);font-size:.73rem;font-weight:600;cursor:pointer;border:none;transition:all .12s;font-family:var(--sans)}
+.btn-go{background:var(--green);color:#000}.btn-go:hover{background:#34d399;box-shadow:0 0 14px rgba(16,185,129,.3)}
+.btn-go:disabled{opacity:.3;cursor:not-allowed;box-shadow:none}
+.btn-x{background:var(--red);color:#fff}.btn-x:hover{background:#f87171}
+.btn-o{background:transparent;border:1px solid var(--brd);color:var(--t2)}.btn-o:hover{border-color:var(--t2);color:var(--t1)}
+.btn-rq{background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3)}.btn-rq:hover{background:rgba(245,158,11,.25)}
+.btn-s{padding:3px 9px;font-size:.66rem}
+
+.mono{font-family:var(--mono);font-size:.75rem}
+.sha{color:var(--cyan);font-family:var(--mono);font-size:.75rem}
+.met{color:var(--green);font-family:var(--mono);font-weight:700}
+.dim{color:var(--t3)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.g31{display:grid;grid-template-columns:2fr 1fr;gap:1rem}
+.mb{margin-bottom:1rem}
+.view{display:none}.view.on{display:block}
+
+.best{background:linear-gradient(135deg,rgba(16,185,129,.07),rgba(6,182,212,.04));border:1px solid rgba(16,185,129,.18);border-radius:var(--r);padding:.8rem 1rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.best-l{font-size:.6rem;text-transform:uppercase;letter-spacing:.9px;color:var(--green);margin-bottom:.15rem}
+.cw{position:relative;height:260px;padding:.5rem}
+
+.wa{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700;color:#fff}
+.wn{display:flex;align-items:center;gap:7px;font-weight:600;font-size:.8rem}
+.pb{height:3px;background:var(--brd);border-radius:2px;overflow:hidden;margin-top:3px;width:90px}.pf{height:100%;border-radius:2px}
+
+.banner{border-radius:var(--rs);padding:.5rem 1rem;font-size:.75rem;display:flex;align-items:center;gap:7px;margin-bottom:.85rem}
+.banner-info{background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.13);color:var(--blue)}
+.banner-warn{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);color:var(--red)}
+
+.tl{display:flex;align-items:flex-start;gap:.6rem;padding:.4rem 0;font-size:.75rem}
+.tdot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.tt{color:var(--t3);font-family:var(--mono);font-size:.65rem}
+
+.ei{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.75rem;margin-bottom:1rem;align-items:end}
+.ei-l{font-size:.6rem;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:1px}
+.ei-v{font-size:.82rem;font-weight:500}
+
+tr.fade td{opacity:.4}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span>autoresearch swarm</div>
+  <div class="topbar-r">
+    <div class="pill"><span class="bd" style="background:var(--green)"></span>ONLINE</div>
+    <span>5 workers</span>
+    <span>uptime 14h 32m</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══ STAT BOXES (always at top, content swaps) ═══ -->
+  <div class="stats" id="stats-home">
+    <div class="s sc"><div class="sl">Active Experiment</div><div class="sv" style="color:var(--cyan)">1</div><div class="ss">overnight-gpt2-opt</div></div>
+    <div class="s sg"><div class="sl">Completed Trials</div><div class="sv" style="color:var(--green)">47</div><div class="ss">+12 last hour</div></div>
+    <div class="s sg"><div class="sl">Best val_bpb</div><div class="sv" style="color:var(--green)">0.8934</div><div class="ss">-11.2% vs baseline</div></div>
+    <div class="s sa"><div class="sl">Workers Active</div><div class="sv" style="color:var(--amber)">4</div><div class="ss">0 idle · 1 stuck</div></div>
+    <div class="s sb"><div class="sl">Avg Trial Time</div><div class="sv">6m 12s</div><div class="ss">~9.7 trials/hr</div></div>
+  </div>
+
+  <div class="stats" id="stats-exp" style="display:none">
+    <div class="s sc"><div class="sl">Running For</div><div class="sv" style="color:var(--cyan)">14h 32m</div><div class="ss">since Mar 24, 22:15</div></div>
+    <div class="s sg"><div class="sl">Best val_bpb</div><div class="sv" style="color:var(--green)">0.8934</div><div class="ss">-11.2% vs baseline</div></div>
+    <div class="s sg"><div class="sl">Trials</div><div class="sv">53</div><div class="ss">47 done · 4 running · 2 queued</div></div>
+    <div class="s sa"><div class="sl">Workers on This</div><div class="sv" style="color:var(--amber)">4</div><div class="ss">of 5 registered</div></div>
+    <div class="s sb"><div class="sl">Avg Trial Time</div><div class="sv">6m 12s</div><div class="ss">~9.7 trials/hr</div></div>
+  </div>
+
+  <!-- ═══ NAV ROW (changes based on state) ═══ -->
+
+  <!-- Home: just info banner -->
+  <div id="nav-home">
+    <div class="banner banner-info">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="6"/><path d="M7 4.5v2.5M7 9.5v.5"/></svg>
+      One experiment runs at a time. Stop the active one before starting another.
+    </div>
+  </div>
+
+  <!-- Experiment: back + tabs -->
+  <div id="nav-exp" style="display:none">
+    <div class="nav-row">
+      <button class="back" onclick="goHome()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        All experiments
+      </button>
+      <div class="sep"></div>
+      <span style="font-weight:700;font-size:.9rem;margin-right:.5rem" id="nav-exp-name">overnight-gpt2-opt</span>
+      <span class="badge b-run"><span class="bd"></span>Running</span>
+      <div style="flex:1"></div>
+      <button class="tab on" onclick="showSub('detail')">Experiment</button>
+      <button class="tab" onclick="showSub('workers')">Workers</button>
+      <div class="sep"></div>
+      <button class="btn btn-x btn-s">Stop</button>
+    </div>
+  </div>
+
+  <!-- ═══ VIEWS ═══ -->
+
+  <!-- HOME: experiments list -->
+  <div class="view on" id="v-home">
+    <div class="card">
+      <div class="ch"><h2>All Experiments</h2><button class="btn btn-o">+ New Experiment</button></div>
+      <table>
+        <thead><tr><th>Experiment</th><th>Status</th><th>Best val_bpb</th><th>Trials</th><th>Elapsed</th><th></th></tr></thead>
+        <tbody>
+          <tr class="ck" onclick="selectExp('overnight-gpt2-opt')">
+            <td><div style="font-weight:600">overnight-gpt2-opt</div><div class="dim" style="font-size:.68rem">Mar 24, 22:15 · tinystories-10k.zip</div></td>
+            <td><span class="badge b-run"><span class="bd"></span>Running</span></td>
+            <td><span class="met">0.8934</span></td>
+            <td><span style="color:var(--green)">47</span><span class="dim"> / </span><span style="color:var(--blue)">4</span><span class="dim"> / </span><span style="color:var(--amber)">2</span></td>
+            <td class="mono">14h 32m</td>
+            <td><button class="btn btn-x btn-s" onclick="event.stopPropagation()">Stop</button></td>
+          </tr>
+          <tr class="ck fade">
+            <td><div style="font-weight:600">baseline-mar23</div><div class="dim" style="font-size:.68rem">Mar 23, 10:00 · tinystories-5k.zip</div></td>
+            <td><span class="badge b-stop"><span class="bd"></span>Stopped</span></td>
+            <td class="mono" style="color:var(--t2)">1.0062</td>
+            <td><span style="color:var(--green)">12</span><span class="dim"> / </span><span style="color:var(--red)">1</span><span class="dim"> fail</span></td>
+            <td class="mono">3h 15m</td>
+            <td><button class="btn btn-go btn-s" disabled title="Stop running experiment first">Resume</button></td>
+          </tr>
+          <tr class="ck fade">
+            <td><div style="font-weight:600;color:var(--t3)">new-arch-test</div><div class="dim" style="font-size:.68rem">Mar 25, 08:30 · no dataset</div></td>
+            <td><span class="badge b-draft"><span class="bd"></span>Draft</span></td>
+            <td class="dim">--</td>
+            <td class="dim">0</td>
+            <td class="dim">--</td>
+            <td><button class="btn btn-go btn-s" disabled>Start</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- EXPERIMENT DETAIL sub-tab -->
+  <div class="view" id="v-detail">
+    <div class="ei">
+      <div><div class="ei-l">Dataset</div><div class="ei-v">tinystories-10k.zip</div></div>
+      <div><div class="ei-l">Prompt</div><div class="ei-v">program.md <span class="dim">(2.1 KB)</span></div></div>
+      <div><div class="ei-l">Mode</div><div class="ei-v">Run until Stop</div></div>
+      <div><button class="btn btn-o btn-s">View Prompt</button></div>
+    </div>
+    <div class="best">
+      <div><div class="best-l">Current Best</div><div style="display:flex;align-items:baseline;gap:.6rem"><span class="met" style="font-size:1.15rem">0.8934</span><span class="dim">val_bpb</span><span style="color:var(--green);font-size:.75rem">-11.2% from baseline</span></div></div>
+      <div style="text-align:right"><div class="best-l">Best Commit</div><span class="sha">e7f2a1b</span><div class="dim" style="font-size:.65rem">Trial #42 · SwiftPanda-07 · 2m ago</div></div>
+    </div>
+    <div class="g31 mb">
+      <div class="card"><div class="ch"><h2>Improvement Over Time</h2><span class="dim" style="font-size:.65rem">47 trials</span></div><div class="cw"><canvas id="c1"></canvas></div></div>
+      <div class="card"><div class="ch"><h2>Night Stats</h2></div><div class="cb">
+        <div style="margin-bottom:.8rem"><div class="sl">Improvement Rate</div><div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--green)">23.4%</div><div class="dim" style="font-size:.65rem">of trials improved best</div></div>
+        <div style="margin-bottom:.8rem"><div class="sl">Failed</div><div style="font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--red)">2</div><div class="dim" style="font-size:.65rem">OOM (#8), SyntaxError (#31)</div></div>
+        <div><div class="sl">Baseline</div><div style="font-family:var(--mono);font-size:.85rem">1.0062 <span class="dim">val_bpb</span></div></div>
+      </div></div>
+    </div>
+    <div class="card"><div class="ch"><h2>Trials</h2><div style="display:flex;gap:3px"><button class="btn btn-o btn-s">All (53)</button><button class="btn btn-o btn-s" style="color:var(--green)">Done (47)</button><button class="btn btn-o btn-s" style="color:var(--red)">Failed (2)</button></div></div>
+      <table><thead><tr><th>#</th><th>Status</th><th>val_bpb</th><th>vs Best</th><th>Commit</th><th>Worker</th><th>Duration</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">47</td><td><span class="badge b-done"><span class="bd"></span>Done</span></td><td><span class="met">0.8934</span></td><td><span style="color:var(--green);font-size:.68rem;font-weight:700">NEW BEST</span></td><td><span class="sha">e7f2a1b</span></td><td>SwiftPanda-07</td><td class="mono">5m 48s</td><td class="dim" style="font-size:.65rem">2m ago</td></tr>
+        <tr><td class="mono">46</td><td><span class="badge b-done"><span class="bd"></span>Done</span></td><td class="mono">0.9105</td><td><span class="dim">+0.017</span></td><td><span class="sha">a3c8d2f</span></td><td>BraveOtter-12</td><td class="mono">6m 02s</td><td class="dim" style="font-size:.65rem">8m ago</td></tr>
+        <tr><td class="mono">45</td><td><span class="badge b-run"><span class="bd"></span>Running</span></td><td class="dim">--</td><td class="dim">--</td><td><span class="sha">b9e4f1a</span></td><td>QuietFox-03</td><td class="mono">3m 21s...</td><td class="dim" style="font-size:.65rem">in progress</td></tr>
+        <tr><td class="mono">44</td><td><span class="badge b-run"><span class="bd"></span>Running</span></td><td class="dim">--</td><td class="dim">--</td><td><span class="sha">d4a9c2e</span></td><td>NobleBear-19</td><td class="mono">1m 44s...</td><td class="dim" style="font-size:.65rem">in progress</td></tr>
+        <tr><td class="mono">31</td><td><span class="badge b-fail"><span class="bd"></span>Failed</span></td><td class="dim">--</td><td class="dim">--</td><td><span class="sha" style="color:var(--red)">f2b1c8d</span></td><td>BraveOtter-12</td><td class="mono">0m 12s</td><td class="dim" style="font-size:.65rem">SyntaxError ln 142</td></tr>
+        <tr><td class="mono">1</td><td><span class="badge b-done"><span class="bd"></span>Done</span></td><td class="mono">1.0062</td><td class="dim" style="font-size:.65rem">BASELINE</td><td><span class="sha">abc1234</span></td><td>SwiftPanda-07</td><td class="mono">5m 33s</td><td class="dim" style="font-size:.65rem">14h ago</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- WORKERS sub-tab -->
+  <div class="view" id="v-workers">
+    <div class="banner banner-warn">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L1.3 17a1.8 1.8 0 001.5 2.7h15.4a1.8 1.8 0 001.5-2.7L11.4 3a1.8 1.8 0 00-3 0zM11 8.5v3.5M11 15h.01"/></svg>
+      1 stuck trial: #38 on <strong style="margin:0 3px">CalmWolf-22</strong> (heartbeat lost 2h ago)
+      <button class="btn btn-rq btn-s" style="margin-left:auto">Requeue</button>
+      <button class="btn btn-o btn-s" style="color:var(--red)">Mark Failed</button>
+    </div>
+    <div class="card mb"><div class="ch"><h2>Workers</h2><span class="dim" style="font-size:.65rem">refreshes every 5s</span></div>
+      <table><thead><tr><th>Worker</th><th>State</th><th>Current Trial</th><th>Done</th><th>Avg Time</th><th>Best val_bpb</th><th>Last Seen</th><th>GPU</th></tr></thead>
+      <tbody>
+        <tr><td><div class="wn"><div class="wa" style="background:linear-gradient(135deg,#3b82f6,#06b6d4)">SP</div>SwiftPanda-07</div></td><td><span class="badge b-train"><span class="bd"></span>Training</span></td><td><span class="sha">e7f2a1b</span><div class="pb"><div class="pf" style="width:72%;background:var(--cyan)"></div></div></td><td class="mono">14</td><td class="mono">5m 54s</td><td><span class="met">0.8934</span></td><td class="dim" style="font-size:.65rem">3s</td><td class="dim" style="font-size:.65rem">H100 80GB</td></tr>
+        <tr><td><div class="wn"><div class="wa" style="background:linear-gradient(135deg,#8b5cf6,#ec4899)">BO</div>BraveOtter-12</div></td><td><span class="badge b-train"><span class="bd"></span>Training</span></td><td><span class="sha">a3c8d2f</span><div class="pb"><div class="pf" style="width:45%;background:var(--cyan)"></div></div></td><td class="mono">13</td><td class="mono">6m 18s</td><td class="mono" style="color:var(--t2)">0.9012</td><td class="dim" style="font-size:.65rem">1s</td><td class="dim" style="font-size:.65rem">A100 40GB</td></tr>
+        <tr><td><div class="wn"><div class="wa" style="background:linear-gradient(135deg,#10b981,#06b6d4)">QF</div>QuietFox-03</div></td><td><span class="badge b-train"><span class="bd"></span>Training</span></td><td><span class="sha">b9e4f1a</span><div class="pb"><div class="pf" style="width:88%;background:var(--cyan)"></div></div></td><td class="mono">12</td><td class="mono">6m 42s</td><td class="mono" style="color:var(--t2)">0.9187</td><td class="dim" style="font-size:.65rem">2s</td><td class="dim" style="font-size:.65rem">RTX 4090</td></tr>
+        <tr><td><div class="wn"><div class="wa" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">NB</div>NobleBear-19</div></td><td><span class="badge b-train"><span class="bd"></span>Training</span></td><td><span class="sha">d4a9c2e</span><div class="pb"><div class="pf" style="width:30%;background:var(--cyan)"></div></div></td><td class="mono">8</td><td class="mono">7m 05s</td><td class="mono" style="color:var(--t2)">0.9341</td><td class="dim" style="font-size:.65rem">5s</td><td class="dim" style="font-size:.65rem">RTX 3090</td></tr>
+        <tr style="opacity:.4"><td><div class="wn"><div class="wa" style="background:#374151">CW</div>CalmWolf-22</div></td><td><span class="badge b-off"><span class="bd"></span>Offline</span></td><td><span class="dim" style="font-size:.65rem">#38 <span class="badge b-stuck">STUCK</span></span></td><td class="mono">0</td><td class="dim">--</td><td class="dim">--</td><td class="dim" style="font-size:.65rem;color:var(--red)">2h ago</td><td class="dim" style="font-size:.65rem">RTX 3080</td></tr>
+      </tbody></table>
+    </div>
+    <div class="g2">
+      <div class="card"><div class="ch"><h2>Trials per Worker</h2></div><div class="cw" style="height:180px"><canvas id="c2"></canvas></div></div>
+      <div class="card"><div class="ch"><h2>Recent Activity</h2></div><div class="cb" style="max-height:180px;overflow-y:auto">
+        <div class="tl"><div class="tdot" style="background:var(--green)"></div><div><strong>SwiftPanda-07</strong> done #47 <span class="met">0.8934</span> <span style="color:var(--green);font-size:.63rem;font-weight:700">NEW BEST</span><div class="tt">2m ago</div></div></div>
+        <div class="tl"><div class="tdot" style="background:var(--blue)"></div><div><strong>QuietFox-03</strong> claimed #45 <span class="sha">b9e4f1a</span><div class="tt">3m ago</div></div></div>
+        <div class="tl"><div class="tdot" style="background:var(--green)"></div><div><strong>BraveOtter-12</strong> done #46 <span class="mono">0.9105</span><div class="tt">8m ago</div></div></div>
+        <div class="tl"><div class="tdot" style="background:var(--red)"></div><div><strong>CalmWolf-22</strong> <span style="color:var(--red)">heartbeat lost</span> (#38)<div class="tt">2h ago</div></div></div>
+      </div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function goHome(){
+  document.getElementById('stats-home').style.display='';
+  document.getElementById('stats-exp').style.display='none';
+  document.getElementById('nav-home').style.display='';
+  document.getElementById('nav-exp').style.display='none';
+  show('v-home');
+}
+function selectExp(name){
+  document.getElementById('nav-exp-name').textContent=name;
+  document.getElementById('stats-home').style.display='none';
+  document.getElementById('stats-exp').style.display='';
+  document.getElementById('nav-home').style.display='none';
+  document.getElementById('nav-exp').style.display='';
+  showSub('detail');
+}
+function showSub(s){
+  document.querySelectorAll('#nav-exp .tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('#nav-exp .tab').forEach(t=>{if((s==='detail'&&t.textContent==='Experiment')||(s==='workers'&&t.textContent==='Workers'))t.classList.add('on')});
+  show(s==='detail'?'v-detail':'v-workers');
+  if(s==='detail')rC1();if(s==='workers')rC2();
+}
+function show(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));document.getElementById(id).classList.add('on')}
+function rC1(){
+  const c=document.getElementById('c1');if(c._c)c._c.destroy();
+  const d=[1.006,1.002,.998,.995,.991,.988,.99,null,.982,.979,.976,.974,.971,.968,.966,.963,.96,.958,.955,.952,.95,.948,.945,.943,.94,.938,.936,.934,.932,.93,null,.927,.925,.922,.92,.918,.916,.914,.912,.91,.908,.905,.903,.901,.898,.911,.893];
+  let b=9;const bs=d.map(v=>{if(v!==null&&v<b)b=v;return b<9?b:null});
+  c._c=new Chart(c,{type:'line',data:{labels:Array.from({length:47},(_,i)=>i+1),datasets:[
+    {label:'val_bpb',data:d,borderColor:'rgba(59,130,246,.5)',backgroundColor:'rgba(59,130,246,.03)',pointBackgroundColor:d.map((v,i)=>v===null?'rgba(239,68,68,.8)':(v===bs[i]&&(i===0||bs[i]<bs[i-1])?'rgba(16,185,129,1)':'rgba(59,130,246,.4)')),pointRadius:d.map((v,i)=>v===null?3.5:(v===bs[i]&&(i===0||bs[i]<bs[i-1])?3.5:1.2)),borderWidth:1.3,tension:.3,spanGaps:false,fill:true},
+    {label:'Best so far',data:bs,borderColor:'rgba(16,185,129,1)',borderWidth:2,pointRadius:0,tension:.1,fill:false,stepped:'before'}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},plugins:{legend:{labels:{color:'#94a3b8',font:{size:9,family:'Inter'}}},tooltip:{backgroundColor:'#1e293b',bodyFont:{family:'JetBrains Mono',size:10},borderColor:'#334155',borderWidth:1}},scales:{x:{title:{display:true,text:'Trial #',color:'#64748b',font:{size:9}},grid:{color:'rgba(30,41,59,.3)'},ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:8}}},y:{title:{display:true,text:'val_bpb',color:'#64748b',font:{size:9}},grid:{color:'rgba(30,41,59,.3)'},ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:8}}}}}});
+}
+function rC2(){
+  const c=document.getElementById('c2');if(c._c)c._c.destroy();
+  c._c=new Chart(c,{type:'bar',data:{labels:['SwiftPanda-07','BraveOtter-12','QuietFox-03','NobleBear-19','CalmWolf-22'],datasets:[{data:[14,13,12,8,0],backgroundColor:['rgba(59,130,246,.6)','rgba(139,92,246,.6)','rgba(16,185,129,.6)','rgba(245,158,11,.6)','rgba(100,116,139,.2)'],borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e293b',bodyFont:{family:'JetBrains Mono',size:10},borderColor:'#334155',borderWidth:1}},scales:{x:{grid:{color:'rgba(30,41,59,.3)'},ticks:{color:'#64748b',font:{family:'JetBrains Mono',size:8}}},y:{grid:{display:false},ticks:{color:'#94a3b8',font:{family:'Inter',size:9}}}}}});
+}
+</script>
+</body>
+</html>

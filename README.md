@@ -1,5 +1,17 @@
 # autoresearch
 
+**This fork:** [avizaviz/autoresearch](https://github.com/avizaviz/autoresearch) · **Upstream:** [karpathy/autoresearch](https://github.com/karpathy/autoresearch)
+
+This fork extends upstream with **experiment visualization** and **swarm mode**: a trusted-LAN, client–server style orchestrator that delegates **independent** training runs to multiple GPU machines. Each run is still a normal single-GPU `train.py` job with the same fixed time budget and **`val_bpb`** metric as Karpathy’s design—swarm mode increases **how many trials finish per hour**, not how one trial is computed. Implementation of orchestrator, workers, and dashboards is **on the roadmap**; the sections below describe the target behavior.
+
+| | **Upstream (Karpathy)** | **This fork (target)** |
+|---|------------------------|-------------------------|
+| Training | One GPU, one `train.py` run | Same per worker |
+| Throughput | ~N trials / GPU / hour | ~N × (workers) trials / hour (parallel trials) |
+| Metric | `val_bpb` | Same (per trial) |
+| Viz | `progress.png`, logs | Plots + optional web dashboard (planned) |
+| Network | None | Orchestrator ↔ workers on LAN (planned) |
+
 ![teaser](progress.png)
 
 *One day, frontier AI research used to be done by meat computers in between eating, sleeping, having other fun, and synchronizing once in a while using sound wave interconnect in the ritual of "group meeting". That era is long gone. Research is now entirely the domain of autonomous swarms of AI agents running across compute cluster megastructures in the skies. The agents claim that we are now in the 10,205th generation of the code base, in any case no one could tell if that's right or wrong as the "code" is now a self-modifying binary that has grown beyond human comprehension. This repo is the story of how it all began. -@karpathy, March 2026*.
@@ -39,6 +51,8 @@ uv run train.py
 
 If the above commands all work ok, your setup is working and you can go into autonomous research mode.
 
+**Fork note:** Swarm and visualization CLIs are not wired up yet; until they land, this repo behaves like upstream—single machine, `uv run train.py`, same metric. Watch the [Roadmap](#roadmap-visualization) sections above.
+
 ## Running the agent
 
 Simply spin up your Claude/Codex or whatever you want in this repo (and disable all permissions), then you can prompt something like:
@@ -49,20 +63,78 @@ Hi have a look at program.md and let's kick off a new experiment! let's do the s
 
 The `program.md` file is essentially a super lightweight "skill".
 
+## Swarm mode (parallel trials)
+
+One orchestrator coordinates N worker machines over HTTP. Each worker runs the same `train.py` → `val_bpb` loop as a single-machine setup, but trials execute **in parallel across all workers**. The orchestrator manages a trial queue backed by SQLite — workers register, claim queued trials, run `train.py`, and report results. With 4 workers you get ~4× the experiments per hour.
+
+```
+You → create experiment → Orchestrator (FastAPI, port 8765)
+                               ↕ trial queue (SQLite)
+Worker 1 ← claim → train.py → complete (val_bpb) ─┐
+Worker 2 ← claim → train.py → complete (val_bpb) ──→ Orchestrator tracks best_val_bpb
+Worker N ← claim → train.py → complete (val_bpb) ─┘
+```
+
+**Quick start (swarm):**
+
+```bash
+# On any machine (even CPU-only) — start the orchestrator
+uv run python -m swarm.orchestrator --host 0.0.0.0 --port 8765
+
+# On each GPU machine — start a worker
+uv run python -m swarm.worker --server http://orchestrator-ip:8765 --repo /path/to/autoresearch
+
+# Create and run an experiment
+curl -X POST http://orchestrator-ip:8765/api/experiments \
+  -H 'Content-Type: application/json' -d '{"name": "overnight-run"}'
+
+curl -X PUT http://orchestrator-ip:8765/api/experiments/{id}/dataset \
+  -F file=@data.zip
+
+curl -X PUT http://orchestrator-ip:8765/api/experiments/{id}/prompt \
+  --data-binary @program.md
+
+curl -X POST http://orchestrator-ip:8765/api/experiments/{id}/start
+```
+
+See **[SWARM.md](SWARM.md)** for the full API reference with curl examples for every endpoint.
+
 ## Project structure
 
 ```
-prepare.py      — constants, data prep + runtime utilities (do not modify)
-train.py        — model, optimizer, training loop (agent modifies this)
-program.md      — agent instructions
-pyproject.toml  — dependencies
+prepare.py          — constants, data prep + runtime utilities (do not modify)
+train.py            — model, optimizer, training loop (agent modifies this)
+program.md          — agent instructions (single-machine)
+program_swarm.md    — agent instructions (swarm mode)
+pyproject.toml      — dependencies
+SWARM.md            — swarm API documentation
+swarm/
+  orchestrator.py   — FastAPI server (queue, DB, API)
+  worker.py         — worker process (register, claim, run, complete)
+  db.py             — SQLite helpers
+  schema.sql        — table definitions
+  __main__.py       — usage entry point
+runs/
+  swarm.db          — SQLite database (auto-created at runtime)
+  experiments/      — uploaded datasets + prompts
 ```
+
+## Roadmap: visualization
+
+- **v1 (planned):** Persist trial results (e.g. TSV/JSON under `runs/`) and generate **static** plots (e.g. validation curve, best-`val_bpb`-so-far) from logs or a small metrics sidecar—minimal moving parts, easy to archive.
+- **v2 (planned):** Optional **web dashboard** (read-only) over the same store: experiment table, worker status, live tail of active runs.
+
+## Roadmap: swarm mode (parallel trials)
+
+- **Model:** A **coordinator** process queues trials; **worker** agents on each machine pull work (or accept assignments), run `uv run train.py` in a pinned repo state, and report **`val_bpb`** plus logs back. Intended for **trusted LAN** first (simple shared secret or equivalent); stronger hardening can follow.
+- **Data:** Workers need the same prepared data/tokenizer as a single-machine run (e.g. replicate `~/.cache/autoresearch` or use a shared path—documented in the implementation).
+- **Non-goal (v1):** Multi-GPU **single** training job (DDP/FSDP) as the default product path—that would change comparability vs the classic autoresearch loop; parallel **independent** trials stay the focus.
 
 ## Design choices
 
 - **Single file to modify.** The agent only touches `train.py`. This keeps the scope manageable and diffs reviewable.
 - **Fixed time budget.** Training always runs for exactly 5 minutes, regardless of your specific platform. This means you can expect approx 12 experiments/hour and approx 100 experiments while you sleep. There are two upsides of this design decision. First, this makes experiments directly comparable regardless of what the agent changes (model size, batch size, architecture, etc). Second, this means that autoresearch will find the most optimal model for your platform in that time budget. The downside is that your runs (and results) become not comparable to other people running on other compute platforms.
-- **Self-contained.** No external dependencies beyond PyTorch and a few small packages. No distributed training, no complex configs. One GPU, one file, one metric.
+- **Self-contained.** No external dependencies beyond PyTorch and a few small packages. No distributed training *inside the training loop*, no complex configs. One GPU, one file, one metric. **This fork** will add optional **orchestration** (extra deps, separate package area) that runs **many independent** single-GPU trials across machines—not one model sharded across GPUs unless explicitly explored later.
 
 ## Platform support
 
@@ -82,6 +154,7 @@ I think these would be the reasonable hyperparameters to play with. Ask your fav
 
 ## Notable forks
 
+- **[This fork — avizaviz/autoresearch](https://github.com/avizaviz/autoresearch)** — parallel-trial swarm orchestration (LAN) + experiment visualization (roadmap; see top of this README).
 - [miolini/autoresearch-macos](https://github.com/miolini/autoresearch-macos) (MacOS)
 - [trevin-creator/autoresearch-mlx](https://github.com/trevin-creator/autoresearch-mlx) (MacOS)
 - [jsegov/autoresearch-win-rtx](https://github.com/jsegov/autoresearch-win-rtx) (Windows)
