@@ -1,4 +1,4 @@
-# autoresearch swarm
+# autoresearch-visual-swarm
 
 > Autonomous AI research across multiple GPUs — with real-time visualization.
 >
